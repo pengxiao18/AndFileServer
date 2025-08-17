@@ -1,16 +1,44 @@
 package com.xupx.andfileserver
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import com.xupx.andfileserver.databinding.MainLayoutBinding
 import com.xupx.andfileserver.server.AllFilesAccess
 import com.xupx.andfileserver.server.FileServerService
 
 class MainActivity : ComponentActivity() {
     private lateinit var binding: MainLayoutBinding
+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            ensureAllFilesThenStart()
+        } else {
+            Toast.makeText(
+                application, "请授予通知权限", Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    private val diskPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { granted ->
+        if (granted.values.all { it }) {
+            onStorageReady()
+        } else {
+            Toast.makeText(this, "未授予存储权限，服务启动失败", Toast.LENGTH_SHORT).show()
+        }
+    }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -20,27 +48,58 @@ class MainActivity : ComponentActivity() {
             if (isStarted) {
                 stopService()
             } else {
+                requestNotificationPermission()
+            }
+        }
+
+        onBackPressedDispatcher.addCallback(
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    if (isStarted) {
+                        moveTaskToBack(true)
+                    } else {
+                        finish()
+                    }
+                }
+            })
+    }
+
+    /**
+     * 通知权限
+     */
+    private fun requestNotificationPermission() {
+        // Android 13 以上才需要申请
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // 检查权限是否已经授予
+            if (ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                // 未授予，请求权限
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                // 已经授予
                 ensureAllFilesThenStart()
             }
         }
     }
 
+    /**
+     * 文件权限
+     */
     private fun ensureAllFilesThenStart() {
         when {
             // Android 11+ 走 All files
-            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R -> {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
                 if (AllFilesAccess.hasAllFilesAccess()) {
                     onStorageReady()
                 } else {
                     AllFilesAccess.requestAllFilesAccess(this)
-                    Toast.makeText(this, "请在系统设置中授予“对所有文件的访问”", Toast.LENGTH_SHORT)
-                        .show()
+                    Toast.makeText(
+                        this, "请在系统设置中授予“对所有文件的访问”", Toast.LENGTH_SHORT
+                    ).show()
                     // 返回本界面后在 onResume 再次检查
                 }
-            }
-            // Android 10（Q）：尽量 targetSdk=29 并设置 requestLegacyExternalStorage=true，可直用 File API
-            android.os.Build.VERSION.SDK_INT == android.os.Build.VERSION_CODES.Q -> {
-                onStorageReady()
             }
             // Android 9 及以下：普通运行时权限
             else -> {
@@ -51,36 +110,21 @@ class MainActivity : ComponentActivity() {
 
     private fun requestLegacyPerms() {
         val perms = arrayOf(
-            android.Manifest.permission.READ_EXTERNAL_STORAGE,
-            android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+            Manifest.permission.READ_EXTERNAL_STORAGE,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
         )
         val need = perms.any {
-            androidx.core.content.ContextCompat.checkSelfPermission(
-                this,
-                it
-            ) != PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(this, it) !=
+                    PackageManager.PERMISSION_GRANTED
         }
         if (need) {
-            registerForActivityResult(
-                ActivityResultContracts.RequestMultiplePermissions()
-            ) { granted ->
-                if (granted.values.all { it }) onStorageReady()
-                else Toast.makeText(this, "未授予存储权限", Toast.LENGTH_SHORT).show()
-            }.launch(perms)
+            diskPermissionLauncher.launch(perms)
         } else onStorageReady()
     }
 
-    override fun onResume() {
-        super.onResume()
-        // 从设置页返回后再次确认
-        /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R &&
-            AllFilesAccess.hasAllFilesAccess()
-        ) {
-            onStorageReady()
-        }*/
-    }
-
     private var isStarted = false
+
+    @SuppressLint("SetTextI18n")
     private fun onStorageReady() {
         if (isStarted) return
         isStarted = true
@@ -88,7 +132,7 @@ class MainActivity : ComponentActivity() {
         FileServerService.startService(this.application)
         binding.btnStart.text = binding.root.resources.getString(R.string.btn_stop)
         Utils.getDeviceIpAddress()?.let {
-            binding.tvIp.text = "http://$it:8080"
+            binding.tvIp.text = "http://$it:${Config.SERVER_PORT}"
         }
         Toast.makeText(this, "服务已启动", Toast.LENGTH_SHORT).show()
     }
@@ -104,5 +148,4 @@ class MainActivity : ComponentActivity() {
         FileServerService.stopService(this.application)
         super.onDestroy()
     }
-
 }
