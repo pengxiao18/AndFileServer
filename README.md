@@ -34,5 +34,16 @@
 
 即可打开 Web 界面进行远程文件管理操作。
 
+---
+
+## 📸 截图
+
+Android端界面：
+![Android UI](docs/images/app.jpg)
+
+PC端页面：
+![PC Home](docs/images/pc.png)
+
+
 
 
