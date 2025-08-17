@@ -1,0 +1,12 @@
+body{font-family: system-ui, sans-serif; max-width: 960px; margin: 40px auto; padding:0 16px;}
+input,button{padding:6px;}
+table{border-collapse:collapse;width:100%}
+td,th{border-bottom:1px solid #ddd;padding:6px;}
+a{text-decoration:none}
+.row:hover{background:#fafafa}
+
+#tbl th.size,     #tbl td.size,
+#tbl th.download, #tbl td.download,
+#tbl th.actions,  #tbl td.actions { text-align: center; }
+#tbl td.actions { white-space: nowrap; }
+#tbl td.actions button { margin-left: 0; } /* 可选：去掉默认间距 */
