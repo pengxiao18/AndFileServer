@@ -75,7 +75,7 @@ async function upload(){
   const path = document.getElementById('p').value;
   const files = document.getElementById('file').files;
   const form = new FormData();
-  for(const f of files) form.append('file', f);
+  for(const f of files) form.append('file', f, encodeURIComponent(f.name));
   const res = await fetch(`/upload?path=${encodeURIComponent(path)}`, {method:'POST', headers:{'X-Token':token}, body:form});
   alert(await res.text()); load();
 }

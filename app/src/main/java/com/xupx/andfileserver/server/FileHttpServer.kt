@@ -6,6 +6,9 @@ import org.json.JSONArray
 import java.io.File
 import java.io.FileInputStream
 import java.net.URLConnection
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
+
 
 class FileHttpServer(
     private val context: Context,
@@ -142,11 +145,12 @@ class FileHttpServer(
         session.parameters.forEach { (key, values) ->
             if (key.startsWith("file")) {
                 values.forEach { fileName ->
+                    val decodeFileName = URLDecoder.decode(fileName, StandardCharsets.UTF_8.name())
                     val tmpPath = files[key] ?: return@forEach
                     val tmp = File(tmpPath)
                     val target = File(
                         destDir,
-                        fileName ?: tmp.name
+                        decodeFileName ?: tmp.name
                     ) // 取原名；某些前端库会放在 file
                     tmp.copyTo(target, overwrite = true)
                     uploaded += target.absolutePath
