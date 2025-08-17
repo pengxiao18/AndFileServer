@@ -5,14 +5,24 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import com.xupx.andfileserver.databinding.MainLayoutBinding
 import com.xupx.andfileserver.server.AllFilesAccess
 import com.xupx.andfileserver.server.FileServerService
 
 class MainActivity : ComponentActivity() {
+    private lateinit var binding: MainLayoutBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ensureAllFilesThenStart()
+        binding = MainLayoutBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        binding.btnStart.setOnClickListener {
+            if (isStarted) {
+                stopService()
+            } else {
+                ensureAllFilesThenStart()
+            }
+        }
     }
 
     private fun ensureAllFilesThenStart() {
@@ -63,20 +73,31 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         // 从设置页返回后再次确认
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R &&
+        /*if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R &&
             AllFilesAccess.hasAllFilesAccess()
         ) {
             onStorageReady()
-        }
+        }*/
     }
 
-    private var isReady = false
+    private var isStarted = false
     private fun onStorageReady() {
-        if (isReady) return
-        isReady = true
+        if (isStarted) return
+        isStarted = true
         // ✅ 在这里开启你的文件服务 / 执行整盘读写逻辑（NanoHTTPD 等）
         FileServerService.startService(this.application)
-        Toast.makeText(this, "已具备整盘访问，服务启动", Toast.LENGTH_SHORT).show()
+        binding.btnStart.text = binding.root.resources.getString(R.string.btn_stop)
+        Utils.getDeviceIpAddress()?.let {
+            binding.tvIp.text = "http://$it:8080"
+        }
+        Toast.makeText(this, "服务已启动", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun stopService() {
+        isStarted = false
+        FileServerService.stopService(application)
+        binding.btnStart.text = binding.root.resources.getString(R.string.btn_start)
+        binding.tvIp.text = ""
     }
 
     override fun onDestroy() {
