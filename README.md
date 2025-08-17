@@ -39,10 +39,10 @@
 ## 📸 截图
 
 Android端界面：
-![Android UI](docs/images/app.jpg)
-
+<img src="docs/images/app.jpg" width="300"/>
+  
 PC端页面：
-![PC Home](docs/images/pc.png)
+<img src="docs/images/pc.png" width="600"/>
 
 
 
