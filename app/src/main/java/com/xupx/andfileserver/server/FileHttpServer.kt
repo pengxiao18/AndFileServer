@@ -113,6 +113,7 @@ class FileHttpServer(
                 "path" to it.absolutePath,
                 "isDir" to it.isDirectory,
                 "size" to if (it.isFile) it.length().formatSize() else -1,
+                "length" to if (it.isFile) it.length() else -1,
                 "lastModified" to Utils.formatTimestamp(it.lastModified())
             )
         } ?: emptyList()

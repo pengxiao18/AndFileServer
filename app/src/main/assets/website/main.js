@@ -90,8 +90,8 @@ function applyFilters(){
       const tb = Date.parse(b.lastModified || 0) || 0;
       return (ta - tb) * mul;
     }
-    if(key === 'size'){
-      const sa = Number(a.size || 0), sb = Number(b.size || 0);
+    if(key === 'length'){
+      const sa = Number(a.length || 0), sb = Number(b.length || 0);
       return (sa - sb) * mul;
     }
     return 0;
