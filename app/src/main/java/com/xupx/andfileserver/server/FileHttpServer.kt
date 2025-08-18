@@ -1,14 +1,25 @@
 package com.xupx.andfileserver.server
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
+import androidx.core.graphics.scale
 import com.xupx.andfileserver.utils.Utils
 import fi.iki.elonen.NanoHTTPD
 import org.json.JSONArray
+import java.io.BufferedOutputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
+import java.io.PipedInputStream
+import java.io.PipedOutputStream
 import java.net.URLConnection
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
+import kotlin.concurrent.thread
 
 
 class FileHttpServer(
@@ -43,6 +54,8 @@ class FileHttpServer(
                 uri.startsWith("/mkdir") -> mkdir(session)
                 uri.startsWith("/rm") -> delete(session)
                 uri.startsWith("/mv") -> move(session)
+                uri.startsWith("/thumb") -> thumb(session)
+                uri.startsWith("/zip") -> zip(session)
                 else -> text(Response.Status.NOT_FOUND, "Not found")
             }
         } catch (e: Exception) {
@@ -134,7 +147,8 @@ class FileHttpServer(
     }
 
     private fun upload(session: IHTTPSession): Response {
-        val destDirPath = session.parameters["path"]?.firstOrNull() ?: rootDir /*"/sdcard/Download"*/
+        val destDirPath =
+            session.parameters["path"]?.firstOrNull() ?: rootDir /*"/sdcard/Download"*/
         val destDir = File(destDirPath)
         if (!destDir.exists()) destDir.mkdirs()
 
@@ -203,6 +217,160 @@ class FileHttpServer(
         )
         src.deleteRecursively()
         return ok("ok")
+    }
+
+    private fun thumb(session: IHTTPSession): Response {
+        val path = session.parameters["path"]?.firstOrNull() ?: return bad("path required")
+        val w = session.parameters["w"]?.firstOrNull()?.toIntOrNull() ?: 256
+        val h = session.parameters["h"]?.firstOrNull()?.toIntOrNull() ?: w
+        val tMs = session.parameters["t"]?.firstOrNull()?.toLongOrNull() ?: 0L  // 视频取帧时间（毫秒）
+
+        val f = safeResolve(path) ?: return bad("invalid path")
+        if (!f.exists()) return notFound()
+
+        return try {
+            val data: ByteArray = if (isVideo(f.name)) {
+                genVideoFrameThumb(f, w, h, tMs)
+            } else {
+                genImageThumb(f, w, h)
+            }
+            val resp = newFixedLengthResponse(
+                Response.Status.OK,
+                "image/jpeg",
+                data.inputStream(),
+                data.size.toLong()
+            )
+            resp.addHeader("Cache-Control", "public, max-age=604800")
+            resp
+        } catch (e: Exception) {
+            text(Response.Status.INTERNAL_ERROR, "thumb error: ${e.message}")
+        }
+    }
+
+    private fun zip(session: IHTTPSession): Response {
+        if (session.method != Method.POST) return bad("POST only")
+        // 兼容 paths=以逗号分隔 或 JSON 数组
+        /*val raw = session.parameters["paths"]?.firstOrNull() ?: run {
+            // NanoHTTPD 解析 body：
+            val files: MutableMap<String, String> = HashMap()
+            session.parseBody(files)  // 将 body 放入 session.parms["postData"]
+            session.parms["postData"] ?: ""
+        }*/
+
+        val files: MutableMap<String, String> = HashMap()
+        session.parseBody(files)
+        val raw = session.parameters["paths"]?.firstOrNull()
+            ?: session.parms["paths"]
+            ?: files["postData"]
+            ?: ""
+
+        val paths: List<String> = parsePaths(raw)
+        if (paths.isEmpty()) return bad("paths required")
+
+        val filesToZip = paths.mapNotNull { safeResolve(it) }.filter { it.exists() }
+        if (filesToZip.isEmpty()) return notFound()
+
+        val pin = PipedInputStream()
+        val pout = PipedOutputStream(pin)
+
+        thread(name = "zip-stream") {
+            ZipOutputStream(BufferedOutputStream(pout)).use { zos ->
+                filesToZip.forEach { f ->
+                    if (f.isDirectory) {
+                        zipDir(zos, f, f.name + "/")
+                    } else {
+                        zipFile(zos, f, f.name)
+                    }
+                }
+            }
+        }
+
+        val resp = newChunkedResponse(Response.Status.OK, "application/zip", pin)
+        resp.addHeader("Content-Disposition", "attachment; filename=\"pack.zip\"")
+        resp.addHeader("Cache-Control", "no-store")
+        return resp
+    }
+
+    private fun zipDir(zos: ZipOutputStream, dir: File, base: String) {
+        val kids = dir.listFiles() ?: return
+        if (kids.isEmpty()) {
+            zos.putNextEntry(ZipEntry(base))
+            zos.closeEntry()
+            return
+        }
+        for (c in kids) {
+            val entryName = base + c.name + if (c.isDirectory) "/" else ""
+            if (c.isDirectory) zipDir(zos, c, entryName) else zipFile(zos, c, entryName)
+        }
+    }
+
+    private fun zipFile(zos: ZipOutputStream, f: File, entryName: String) {
+        zos.putNextEntry(ZipEntry(entryName))
+        FileInputStream(f).use { input ->
+            input.copyTo(zos, 8 * 1024)
+        }
+        zos.closeEntry()
+    }
+
+    private fun parsePaths(raw: String): List<String> = try {
+        val t = raw.trim()
+        when {
+            t.isEmpty() -> emptyList()
+            t.startsWith("[") -> {
+                val arr = JSONArray(t)
+                (0 until arr.length()).map { arr.getString(it) }
+            }
+
+            t.contains(",") -> t.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            else -> listOf(t)
+        }
+    } catch (_: Exception) {
+        emptyList()
+    }
+
+    private fun genImageThumb(f: File, w: Int, h: Int): ByteArray {
+        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(f.absolutePath, opts)
+        var sample = 1
+        while (opts.outWidth / sample > w * 2 || opts.outHeight / sample > h * 2) sample *= 2
+        val opts2 = BitmapFactory.Options().apply { inSampleSize = sample }
+        val src = BitmapFactory.decodeFile(f.absolutePath, opts2)
+            ?: throw IllegalStateException("decode image failed")
+        val scaled = src.scale(w, (src.height * (w.toFloat() / src.width)).toInt())
+        if (scaled !== src) src.recycle()
+        val bos = ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.JPEG, 85, bos)
+        scaled.recycle()
+        return bos.toByteArray()
+    }
+
+    private fun genVideoFrameThumb(f: File, w: Int, h: Int, tMs: Long): ByteArray {
+        val retriever = MediaMetadataRetriever()
+        retriever.setDataSource(f.absolutePath)
+        val timeUs = tMs * 1000
+        val frame = retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
+            ?: retriever.getFrameAtTime(-1) ?: throw IllegalStateException("get frame failed")
+        val scaled = frame.scale(w, (frame.height * (w.toFloat() / frame.width)).toInt())
+        if (scaled !== frame) frame.recycle()
+        val bos = ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.JPEG, 80, bos)
+        scaled.recycle()
+        retriever.release()
+        return bos.toByteArray()
+    }
+
+    // 工具：限制访问根目录（请替换 rootDir 为你项目中的根目录 File 对象/路径）
+    private fun safeResolve(raw: String): File? {
+        val decoded = URLDecoder.decode(raw, StandardCharsets.UTF_8.name())
+        val f = File(decoded)
+        val root = File(rootDir) // 如果你已有 rootDir 变量，请替换这一行
+        val canon = f.canonicalFile
+        return if (canon.path.startsWith(root.canonicalPath)) canon else null
+    }
+
+    private fun isVideo(name: String): Boolean {
+        val ext = name.substringAfterLast('.', "").lowercase()
+        return listOf("mp4", "mkv", "avi", "mov", "wmv", "webm").contains(ext)
     }
 
     private fun ok(msg: String) =
