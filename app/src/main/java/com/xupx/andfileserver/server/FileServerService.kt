@@ -6,13 +6,14 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.xupx.andfileserver.Config
+import com.xupx.andfileserver.FileServerController
 import com.xupx.andfileserver.R
-import com.xupx.andfileserver.Utils
-import fi.iki.elonen.NanoHTTPD
+import com.xupx.andfileserver.utils.Utils
 
 class FileServerService : Service() {
 
@@ -40,23 +41,20 @@ class FileServerService : Service() {
         }
     }
 
-    private var server: NanoHTTPD? = null
-
     override fun onCreate() {
         super.onCreate()
         startForeground(1, buildNotification())
-        server = FileHttpServer(
-            context = application,
-            webDir = Config.WEB_DIR,
-            rootDir = Config.ROOT_DIR,
-            port = Config.SERVER_PORT
-        ) // 自定义类，见下
-        server?.start(Config.READ_TIME_OUT, false)
+        FileServerController.startFileServer()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
+        return START_STICKY
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        server?.stop()
+        FileServerController.stopFileServer()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -74,7 +72,11 @@ class FileServerService : Service() {
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle("文件服务已开启")
             .setContentText("在同一局域网用浏览器访问\nhttp://${ipAddress}:${Config.SERVER_PORT}")
+            .setOngoing(true)
             .setSmallIcon(R.mipmap.ic_launcher)
+            .setLargeIcon(BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
     }
 }

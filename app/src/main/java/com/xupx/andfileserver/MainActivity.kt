@@ -13,6 +13,7 @@ import androidx.core.content.ContextCompat
 import com.xupx.andfileserver.databinding.MainLayoutBinding
 import com.xupx.andfileserver.server.AllFilesAccess
 import com.xupx.andfileserver.server.FileServerService
+import com.xupx.andfileserver.utils.Utils
 
 class MainActivity : ComponentActivity() {
     private lateinit var binding: MainLayoutBinding
@@ -62,6 +63,22 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             })
+
+        isStarted = FileServerController.isServerRunning()
+        refreshUI()
+    }
+
+    @SuppressLint("SetTextI18n")
+    private fun refreshUI() {
+        if (!isStarted) {
+            binding.btnStart.text = binding.root.resources.getString(R.string.btn_start)
+            binding.tvIp.text = ""
+        } else {
+            binding.btnStart.text = binding.root.resources.getString(R.string.btn_stop)
+            Utils.getDeviceIpAddress()?.let {
+                binding.tvIp.text = "http://$it:${Config.SERVER_PORT}"
+            }
+        }
     }
 
     /**
@@ -98,7 +115,6 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(
                         this, "请在系统设置中授予“对所有文件的访问”", Toast.LENGTH_SHORT
                     ).show()
-                    // 返回本界面后在 onResume 再次检查
                 }
             }
             // Android 9 及以下：普通运行时权限
@@ -130,18 +146,16 @@ class MainActivity : ComponentActivity() {
         isStarted = true
         // ✅ 在这里开启你的文件服务 / 执行整盘读写逻辑（NanoHTTPD 等）
         FileServerService.startService(this.application)
-        binding.btnStart.text = binding.root.resources.getString(R.string.btn_stop)
-        Utils.getDeviceIpAddress()?.let {
-            binding.tvIp.text = "http://$it:${Config.SERVER_PORT}"
-        }
-        Toast.makeText(this, "服务已启动", Toast.LENGTH_SHORT).show()
+        refreshUI()
+        Toast.makeText(
+            this, "服务已启动", Toast.LENGTH_SHORT
+        ).show()
     }
 
     private fun stopService() {
         isStarted = false
         FileServerService.stopService(application)
-        binding.btnStart.text = binding.root.resources.getString(R.string.btn_start)
-        binding.tvIp.text = ""
+        refreshUI()
     }
 
     override fun onDestroy() {

@@ -1,4 +1,4 @@
-package com.xupx.andfileserver
+package com.xupx.andfileserver.utils
 
 import java.net.Inet4Address
 import java.net.NetworkInterface
