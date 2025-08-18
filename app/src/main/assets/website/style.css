@@ -5,6 +5,7 @@ td,th{border-bottom:1px solid #ddd;padding:6px;}
 a{text-decoration:none}
 .row:hover{background:#fafafa}
 
+#tbl th.time,     #tbl td.time,
 #tbl th.size,     #tbl td.size,
 #tbl th.download, #tbl td.download,
 #tbl th.actions,  #tbl td.actions { text-align: center; }

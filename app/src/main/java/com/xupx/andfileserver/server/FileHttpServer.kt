@@ -1,6 +1,7 @@
 package com.xupx.andfileserver.server
 
 import android.content.Context
+import com.xupx.andfileserver.utils.Utils
 import fi.iki.elonen.NanoHTTPD
 import org.json.JSONArray
 import java.io.File
@@ -93,12 +94,13 @@ class FileHttpServer(
                 "Not a directory"
             )
         }
-        val arr = dir.listFiles()?.sortedBy { it.name.lowercase() }?.map {
+        val arr = dir.listFiles()?.sortedBy { it.lastModified() }?.reversed()?.map {
             mapOf(
                 "name" to it.name,
                 "path" to it.absolutePath,
                 "isDir" to it.isDirectory,
-                "size" to if (it.isFile) it.length().formatSize() else -1
+                "size" to if (it.isFile) it.length().formatSize() else -1,
+                "lastModified" to Utils.formatTimestamp(it.lastModified())
             )
         } ?: emptyList()
         val json = JSONArray(arr).toString()
@@ -203,7 +205,8 @@ class FileHttpServer(
         return ok("ok")
     }
 
-    private fun ok(msg: String) = newFixedLengthResponse(Response.Status.OK, MIME_PLAINTEXT, msg)
+    private fun ok(msg: String) =
+        newFixedLengthResponse(Response.Status.OK, MIME_PLAINTEXT, msg)
 
     private fun bad(msg: String) =
         newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, msg)

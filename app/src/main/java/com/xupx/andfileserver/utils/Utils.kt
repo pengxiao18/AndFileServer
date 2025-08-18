@@ -1,7 +1,10 @@
 package com.xupx.andfileserver.utils
 
+import android.annotation.SuppressLint
 import java.net.Inet4Address
 import java.net.NetworkInterface
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 object Utils {
 
@@ -20,6 +23,13 @@ object Utils {
             }
         }
         return null
+    }
+
+    @SuppressLint("ConstantLocale")
+    private val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+    
+    fun formatTimestamp(ts: Long): String {
+        return sdf.format(ts)
     }
 
 }

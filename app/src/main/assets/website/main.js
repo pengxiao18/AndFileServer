@@ -36,6 +36,7 @@ async function load(skipHash = false){
     const parent = path.replace(/\/+$/,'').split('/').slice(0,-1).join('/') || '/';
     tb.insertAdjacentHTML('beforeend', `<tr class="row">
     <td><a href="#" onclick="document.getElementById('p').value='${parent}';load();return false;">..</a></td>
+    <td class="time"></td>
     <td class="size"></td>
     <td class="download"></td>
     <td class="actions"></td>
@@ -45,12 +46,14 @@ async function load(skipHash = false){
     if(it.isDir){
       tb.insertAdjacentHTML('beforeend', `<tr class="row">
         <td>📁 <a href="#" onclick="document.getElementById('p').value='${it.path}';load();return false;">${it.name}</a></td>
+        <td class="time">${it.lastModified}</td>
         <td class="size">-</td>
         <td class="download">-</td>  <!-- 无下载，占位 -->
         <td class="actions"><button onclick="del('${it.path}')">删除</button></td></tr>`.replace(/it\.path/g, it.path).replace(/it\.name/g, it.name));
     } else {
       tb.insertAdjacentHTML('beforeend', `<tr class="row">
         <td>📄 ${it.name}</td>
+        <td class="time">${it.lastModified}</td>
         <td class="size">${it.size}</td>
         <td class="download"><a href="/dl?path=${encodeURIComponent(it.path)}" target="_blank">下载</a></td>
         <td class="actions"><button onclick="del('${it.path}')">删除</button></td></tr>`);
