@@ -55,8 +55,18 @@ class FileHttpServer(
                 uri.endsWith(".css") -> serveAsset(uri.trimStart('/'), "text/css")
                 uri.endsWith(".js") -> serveAsset(uri.trimStart('/'), "application/javascript")
 
-                uri.endsWith(".ico") -> serveBinaryAsset(uri.trimStart('/'), "image/x-icon", cacheForever = true)
-                uri.endsWith(".png") -> serveBinaryAsset(uri.trimStart('/'), "image/png", cacheForever = true)
+                uri.endsWith(".ico") -> serveBinaryAsset(
+                    uri.trimStart('/'),
+                    "image/x-icon",
+                    cacheForever = true
+                )
+
+                uri.endsWith(".png") -> serveBinaryAsset(
+                    uri.trimStart('/'),
+                    "image/png",
+                    cacheForever = true
+                )
+
                 uri.endsWith(".svg") -> serveAsset(uri.trimStart('/'), "image/svg+xml")
 
                 uri.startsWith("/ls") -> listDir(session)
@@ -340,7 +350,7 @@ class FileHttpServer(
             }
         }
         return newChunkedResponse(Status.OK, "application/zip", pin).apply {
-            addHeader("Content-Disposition", "attachment; filename=\"pack.zip\"")
+            addHeader("Content-Disposition", contentDispositionAttachment("pack.zip"))
             addHeader("Cache-Control", "no-store")
         }
     }
@@ -433,12 +443,25 @@ class FileHttpServer(
         addHeader("Accept-Ranges", "bytes")
     }
 
+    // === Helpers: RFC 5987 Content-Disposition for correct UTF-8 filenames ===
+    private fun contentDispositionAttachment(name: String): String {
+        val asciiFallback = name.replace(Regex("[^\u0020-\u007E]"), "_")
+        val encoded = java.net.URLEncoder.encode(name, "UTF-8").replace("+", "%20")
+        return "attachment; filename=\"$asciiFallback\"; filename*=UTF-8''$encoded"
+    }
+
+    private fun contentDispositionInline(name: String): String {
+        val asciiFallback = name.replace(Regex("[^\u0020-\u007E]"), "_")
+        val encoded = java.net.URLEncoder.encode(name, "UTF-8").replace("+", "%20")
+        return "inline; filename=\"$asciiFallback\"; filename*=UTF-8''$encoded"
+    }
+
     private fun Response.withCommonDownloadHeaders(
         name: String,
         etag: String?,
         lastModified: String?
     ): Response = apply {
-        addHeader("Content-Disposition", "attachment; filename=\"$name\"")
+        addHeader("Content-Disposition", contentDispositionAttachment(name))
         if (etag != null) addHeader("ETag", etag)
         if (lastModified != null) addHeader("Last-Modified", lastModified)
     }
@@ -548,11 +571,15 @@ class FileHttpServer(
     }
 
     private fun safeResolve(raw: String): File? {
-        val decoded = URLDecoder.decode(raw, StandardCharsets.UTF_8.name())
+        /*val decoded = URLDecoder.decode(raw, StandardCharsets.UTF_8.name())
         val f = File(decoded)
         val root = File(rootDir)
         val canon = f.canonicalFile
-        return if (canon.path.startsWith(root.canonicalPath)) canon else null
+        return if (canon.path.startsWith(root.canonicalPath)) canon else null*/
+
+        val rootCanon = File(rootDir).canonicalFile
+        val canon = File(raw).canonicalFile
+        return if (canon.path.startsWith(rootCanon.path)) canon else null
     }
 
     private fun sanitizedFileName(name: String): String = name
