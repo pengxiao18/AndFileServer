@@ -39,8 +39,8 @@ function updateViewButtons(){
   const bl = $("#btnList"), bg = $("#btnGrid");
   bl?.classList.toggle("active", v === "list");
   bg?.classList.toggle("active", v === "grid");
-  bl?.setAttribute("aria-pressed", v === "list");
-  bg?.setAttribute("aria-pressed", v === "grid");
+  bl?.setAttribute("aria-pressed", String(v === "list"));
+  bg?.setAttribute("aria-pressed", String(v === "grid"));
 }
 function applyView(v){
   $("#tbl").classList.toggle("is-hidden", v !== "list");
@@ -119,7 +119,7 @@ function renderList(path, data){
     const parent = parentPath(path);
     tbody.insertAdjacentHTML('beforeend', `<tr class="row go-up">
       <td class="col-check"></td>
-      <td><a href="#" onclick="document.getElementById('p').value='${parent}';load();return false;">..</a></td>
+      <td><a href="#" onclick="document.getElementById('p').value='${parent}';load();return false;" title="返回上级">..</a></td>
       <td class="time"></td>
       <td class="size"></td>
       <td class="download"></td>
@@ -130,20 +130,21 @@ function renderList(path, data){
     const checked = selection.has(it.path) ? 'checked' : '';
     if(it.isDir){
       tbody.insertAdjacentHTML('beforeend', `<tr class="row">
-        <td class="col-check"><input type="checkbox" ${checked} onchange="toggleSelect('${it.path}', this.checked)"></td>
+        <td class="col-check"><input type="checkbox" ${checked} onchange="toggleSelect('${it.path}', this.checked)" aria-label="选择 ${it.name}"></td>
         <td>📁 <a href="#" onclick="document.getElementById('p').value='${it.path}';load();return false;" title="${it.name}">${it.name}</a></td>
         <td class="time">${it.lastModified || ''}</td>
         <td class="size">-</td>
         <td class="download">-</td>
-        <td class="actions"><button onclick="del('${it.path}')">删除</button></td></tr>`);
+        <td class="actions"><button class="btn-danger" onclick="del('${it.path}')">删除</button></td></tr>`);
     } else {
+      const size = it.size ?? (it.length ?? '-');
       tbody.insertAdjacentHTML('beforeend', `<tr class="row">
-        <td class="col-check"><input type="checkbox" ${checked} onchange="toggleSelect('${it.path}', this.checked)"></td>
+        <td class="col-check"><input type="checkbox" ${checked} onchange="toggleSelect('${it.path}', this.checked)" aria-label="选择 ${it.name}"></td>
         <td>📄 <span title="${it.name}">${it.name}</span></td>
         <td class="time">${it.lastModified || ''}</td>
-        <td class="size">${it.size || '-'}</td>
-        <td class="download"><a href="/dl?path=${encodeURIComponent(it.path)}" target="_blank">下载</a></td>
-        <td class="actions"><button onclick="del('${it.path}')">删除</button></td></tr>`);
+        <td class="size">${size}</td>
+        <td class="download"><a class="btn" href="/dl?path=${encodeURIComponent(it.path)}" target="_blank" rel="noopener">下载</a></td>
+        <td class="actions"><button class="btn-danger" onclick="del('${it.path}')">删除</button></td></tr>`);
     }
   }
 }
@@ -173,7 +174,7 @@ function renderGrid(path, data){
   const items = [];
   if(path !== "/"){
     const parent = parentPath(path);
-    items.push({ name: "..", path: parent, isDir: true, size: "-", lastModified: "" });
+    items.push({ name: "..", path: parent, isDir: true, length: "-", lastModified: "" });
   }
   for(const it of data) items.push(it);
 
@@ -186,20 +187,20 @@ function renderGrid(path, data){
       ? `<img class="thumb" loading="lazy" src="/thumb?path=${encodeURIComponent(it.path)}&w=320&h=200&t=1000" alt="${it.name}">`
       : `<div class="thumb thumb-icon" aria-hidden="true">${isUp ? "⬆️" : iconFor(it.name, it.isDir)}</div>`;
 
-    const subtitle = it.isDir ? "文件夹" : (it.size || "-");
+    const subtitle = it.isDir ? "文件夹" : ((it.size ?? it.length) ?? "-");
     const time = it.lastModified || "";
 
     const actions = it.isDir && !isUp
-      ? `<button class="danger" onclick="del('${it.path}')">删除</button>`
+      ? `<button class="btn-danger" onclick="del('${it.path}')">删除</button>`
       : (!it.isDir && !isUp
-          ? `<a class="btn" href="/dl?path=${encodeURIComponent(it.path)}" target="_blank">下载</a>
-             <button class="danger" onclick="del('${it.path}')">删除</button>`
+          ? `<a class="btn" href="/dl?path=${encodeURIComponent(it.path)}" target="_blank" rel="noopener">下载</a>
+             <button class="btn-danger" onclick="del('${it.path}')">删除</button>`
           : "");
 
     const card = document.createElement("div");
     card.className = "file-card";
     card.innerHTML = `
-      <label class="card-check"><input type="checkbox" ${checked ? "checked": ""} onchange="toggleSelect('${it.path}', this.checked)"></label>
+      <label class="card-check"><input type="checkbox" ${checked ? "checked": ""} onchange="toggleSelect('${it.path}', this.checked)" aria-label="选择 ${it.name}"></label>
       <div class="thumb-wrap">${thumb}</div>
       <div class="file-meta">
         <div class="file-name" title="${it.name}">${it.name}</div>
@@ -209,8 +210,9 @@ function renderGrid(path, data){
       <div class="file-actions">${actions}</div>
     `;
 
+    // 点击卡片空白处进入目录或无动作；避免与按钮/勾选冲突
     card.addEventListener("click", (e)=>{
-      if (e.target.closest(".file-actions") || e.target.closest(".card-check")) return;
+      if (e.target.closest(".file-actions") || e.target.closest(".card-check") || e.target.tagName === 'A' || e.target.tagName === 'BUTTON') return;
       if (isUp || it.isDir) { $("#p").value = it.path; load(); }
     });
 
@@ -237,8 +239,10 @@ function updateBulkbar(){
   const count = selection.size;
   $("#selCount").textContent = `已选 ${count} 项`;
   $("#bulkbar").classList.toggle("is-hidden", count === 0);
-  $("#chkAll").checked = (count>0 && count === currentItemsFiltered.filter(x=>!x.isDir || x.isDir).length);
-  $("#chkAllList").checked = $("#chkAll").checked;
+  const allCount = currentItemsFiltered.length;
+  const allChecked = (count>0 && count === allCount);
+  $("#chkAll").checked = allChecked;
+  $("#chkAllList").checked = allChecked;
 }
 
 async function bulkDelete(){
@@ -256,6 +260,7 @@ function bulkDownload(){
     const a = document.createElement('a');
     a.href = `/dl?path=${encodeURIComponent(p)}`;
     a.target = '_blank';
+    a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -282,7 +287,6 @@ async function upload(){
   const res = await fetch(`/upload?path=${encodeURIComponent(path)}`, {method:'POST', headers:{'X-Token':token}, body:form});
   alert(await res.text()); load();
 }
-
 
 async function bulkZip(){
   if(selection.size === 0) return;

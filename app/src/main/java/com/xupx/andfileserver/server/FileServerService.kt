@@ -73,10 +73,12 @@ class FileServerService : Service() {
             .setContentTitle("文件服务已开启")
             .setContentText("在同一局域网用浏览器访问\nhttp://${ipAddress}:${Config.SERVER_PORT}")
             .setOngoing(true)
+            .setAutoCancel(false)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setLargeIcon(BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setCategory(Notification.CATEGORY_SERVICE)
             .build()
     }
 }
