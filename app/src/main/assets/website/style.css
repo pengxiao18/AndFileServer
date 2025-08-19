@@ -37,8 +37,8 @@
     --danger-fg:#ff8da1;
   }
 }
-html,body{ background:var(--bg); color:var(--fg); }
-body{font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 1100px; margin: 24px auto; padding:0 16px;}
+html,body{ background:var(--bg); color:var(--fg);  display:flex; flex-direction:column; min-height:100vh; overflow:hidden;}
+body{font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width:min(1300px, 96vw); width:100%; margin:24px auto; padding:0 16px;}
 h1{font-size: 20px; margin: 8px 0 16px;}
 input,button,select{padding:8px; font-size:14px; color:var(--fg); background:var(--card-bg); border:1px solid var(--border); border-radius:10px;}
 button{cursor:pointer;}
@@ -48,6 +48,8 @@ a{text-decoration:none; color:inherit;}
 #p{width: min(64ch, 70vw);}
 .view.is-hidden{display:none !important;}
 ::placeholder{ color: var(--muted2); }
+
+#body{ max-width:none; width:60%; }
 
 /* 通用按钮 */
 .btn{
@@ -109,7 +111,7 @@ td,th{border-bottom:1px solid var(--border);padding:10px; font-size:14px;}
     "actions";
   border:1px solid var(--border);
   border-radius:var(--radius);
-  padding:10px;
+  padding: 8px;
   transition: box-shadow .15s ease, transform .05s ease;
   background:var(--card-bg);
 }
@@ -119,9 +121,9 @@ td,th{border-bottom:1px solid var(--border);padding:10px; font-size:14px;}
 .card-check{ grid-area: check; display:flex; justify-content:flex-end; }
 .card-check input{ width:18px; height:18px; }
 
-.thumb-wrap{ grid-area: thumb; width:100%; height:130px; border:1px dashed var(--border); border-radius:12px; overflow:hidden; display:flex; align-items:center; justify-content:center; background:var(--bg); }
+.thumb-wrap{ grid-area: thumb; width:100%; height: 100px; border:1px dashed var(--border); border-radius:12px; overflow:hidden; display:flex; align-items:center; justify-content:center; background:var(--bg); }
 .thumb{ width:100%; height:100%; object-fit:cover; display:block; }
-.thumb-icon{ font-size:32px; }
+.thumb-icon{ font-size: 24px; }
 
 .file-meta{ grid-area: meta; display:flex; flex-direction:column; gap:4px; margin-top:8px; min-width:0; }
 .file-name{
@@ -186,3 +188,7 @@ td,th{border-bottom:1px solid var(--border);padding:10px; font-size:14px;}
   .modal-content{ height: calc(96vh - 56px); max-height: none; }
 }
 
+
+html, body{ height:100% }
+
+.content-scroll{ flex:1 1 auto; min-height:0; overflow:auto; }
