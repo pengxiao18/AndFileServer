@@ -44,13 +44,13 @@ function applyView(v){
   $("#tbl").classList.toggle("is-hidden", v !== "list");
   $("#grid").classList.toggle("is-hidden", v !== "grid");
 }
+
 function toggleTheme(){
   const next = (getTheme()==="dark")? "light":"dark";
   setTheme(next);
 }
 
-
-/* ===== 上传相关 UI ===== */
+/* ===== 上传相关 UI（仅在文件拖拽时显示遮罩） ===== */
 function bindUploadUI(){
   const file = $("#file");
   const hint = $("#fileHint");
@@ -65,6 +65,17 @@ function bindUploadUI(){
     dz?.classList.add("hidden");
     dz?.setAttribute("aria-hidden","true");
   };
+  const isFileDrag = (e) => {
+    const dt = e.dataTransfer;
+    if (!dt) return false;
+    if (dt.types && typeof dt.types.indexOf === "function") {
+      if (dt.types.indexOf("Files") !== -1) return true;
+    }
+    if (dt.items && dt.items.length) {
+      for (const it of dt.items) if (it.kind === "file") return true;
+    }
+    return false;
+  };
 
   file?.addEventListener("change", ()=>{
     if (!file.files || file.files.length === 0) { 
@@ -74,40 +85,49 @@ function bindUploadUI(){
     hint.textContent = `已选择 ${file.files.length} 个文件`;
   });
 
-  // 打开遮罩
+  // 仅在拖拽“文件”时显示遮罩
   window.addEventListener("dragenter", (e)=>{
-    e.preventDefault();
-    showDZ();
-  });
-
-  // 阻止浏览器默认打开文件
-  window.addEventListener("dragover", (e)=>{
-    e.preventDefault();
-  });
-
-  // 在窗口任意位置 drop/dragend 都要关闭遮罩
-  window.addEventListener("drop", (e)=>{
-    e.preventDefault();
-    const files = e.dataTransfer?.files;
-    // 只有当在遮罩层上松手且有文件时才触发上传
-    if (dz && !dz.classList.contains("hidden") && files && files.length && (e.target === dz || dz.contains(e.target))) {
-      upload(files);
+    if (isFileDrag(e)) {
+      e.preventDefault();
+      showDZ();
     }
-    hideDZ();
+  });
+
+  // 阻止默认仅针对文件拖拽；拖动按钮/链接等不显示遮罩
+  window.addEventListener("dragover", (e)=>{
+    if (isFileDrag(e)) {
+      e.preventDefault();
+    } else {
+      hideDZ();
+    }
+  });
+
+  // drop：仅文件时拦截并上传；否则保持默认行为
+  window.addEventListener("drop", (e)=>{
+    if (isFileDrag(e)) {
+      e.preventDefault();
+      const files = e.dataTransfer?.files;
+      if (dz && !dz.classList.contains("hidden") && files && files.length && (e.target === dz || dz.contains(e.target))) {
+        upload(files);
+      }
+      hideDZ();
+    } else {
+      hideDZ();
+    }
   });
 
   window.addEventListener("dragend", ()=>{
     hideDZ();
   });
 
-  // 如果鼠标拖拽离开窗口边界，也关闭遮罩
+  // 拖出窗口也关闭遮罩
   document.addEventListener("dragleave", (e)=>{
     if (e.target === document.documentElement || e.target === document.body) {
       hideDZ();
     }
   });
 
-  // 点击遮罩任意空白处关闭（避免点不到）
+  // 点击遮罩空白处关闭
   dz?.addEventListener("click", (e)=>{
     if (!inner || !inner.contains(e.target)) {
       hideDZ();
@@ -118,7 +138,18 @@ function bindUploadUI(){
   document.addEventListener("keydown", (e)=>{
     if (e.key === "Escape") hideDZ();
   });
+
+  // 支持从桌面拖拽文件到遮罩
+  dz?.addEventListener("drop", (e)=>{
+    if (isFileDrag(e)) {
+      e.preventDefault();
+      const files = e.dataTransfer?.files;
+      hideDZ();
+      if (files && files.length) upload(files);
+    }
+  });
 }
+
 function setUploadProgress(percent, metaText){
   const bar = $("#uploadProgress");
   const fill = bar?.querySelector(".fill");
@@ -182,7 +213,7 @@ async function upload(passedFiles){
   }
 }
 
-/* ===== 预览支持（保持原有） ===== */
+/* ===== 预览支持 ===== */
 function isImageExt(name){
   const ext = (name.split('.').pop() || '').toLowerCase();
   return ["jpg","jpeg","png","gif","webp","bmp","heic"].includes(ext);
@@ -236,7 +267,7 @@ function closePreview(){
 }
 document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') closePreview(); });
 
-/* ===== 加载 & 过滤 & 渲染（保持原有） ===== */
+/* ===== 加载 & 过滤 & 渲染 ===== */
 async function load(skipHash = false){
   const path = $("#p").value;
   if (!skipHash) setHash(path);
@@ -273,8 +304,21 @@ function applyFilters(){
   render(path, list);
 }
 
-function parentPath(path){
+/*function parentPath(path){
   return path.replace(/\/+/,'').replace(/\/+$/,'').split('/').slice(0,-1).join('/') || '/';
+}*/
+
+function parentPath(p){
+  if (!p) return '/';
+  // 1) 统一分隔符：Windows 反斜杠 -> 正斜杠
+  p = String(p).replace(/[\\]+/g, '/');
+  // 2) 合并重复的正斜杠
+  p = p.replace(/\/+/g, '/');
+  // 3) 去掉末尾斜杠（根目录除外）
+  if (p !== '/') p = p.replace(/\/+$/g, '');
+  // 4) 取上级
+  const up = p.split('/').slice(0, -1).join('/');
+  return up || '/';
 }
 
 function render(path, list){
@@ -399,7 +443,7 @@ function renderGrid(path, data){
   }
 }
 
-/* 选择 / 批量操作（保持原有） */
+/* 选择 / 批量操作 */
 function toggleSelect(path, checked){
   if(checked) selection.add(path); else selection.delete(path);
   updateBulkbar();
@@ -457,7 +501,7 @@ async function mkdir(){
   load();
 }
 
-// 保留 fetch 版本的 zip；无需改动
+// 打包 ZIP
 async function bulkZip(){
   if(selection.size === 0) return;
   const paths = JSON.stringify(Array.from(selection));
