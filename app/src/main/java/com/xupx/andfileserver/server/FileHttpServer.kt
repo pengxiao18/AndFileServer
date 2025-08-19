@@ -56,6 +56,7 @@ class FileHttpServer(
                 uri.startsWith("/mv") -> move(session)
                 uri.startsWith("/thumb") -> thumb(session)
                 uri.startsWith("/zip") -> zip(session)
+                uri.startsWith("/open") -> openInline(session)
                 else -> text(Response.Status.NOT_FOUND, "Not found")
             }
         } catch (e: Exception) {
@@ -290,6 +291,78 @@ class FileHttpServer(
         resp.addHeader("Content-Disposition", "attachment; filename=\"pack.zip\"")
         resp.addHeader("Cache-Control", "no-store")
         return resp
+    }
+
+    private fun parseRange(rangeHeader: String, total: Long): Pair<Long, Long>? {
+        // 仅取第一个范围（多段范围可以按需扩展）
+        val spec = rangeHeader.removePrefix("bytes=").trim().split(",")[0].trim()
+        val parts = spec.split("-", limit = 2)
+        val startStr = parts.getOrNull(0)?.trim().orEmpty()
+        val endStr = parts.getOrNull(1)?.trim().orEmpty()
+
+        return when {
+            // 形式：bytes=Start-End
+            startStr.isNotEmpty() && endStr.isNotEmpty() -> {
+                val s = startStr.toLongOrNull() ?: return null
+                val e = (endStr.toLongOrNull() ?: return null).coerceAtMost(total - 1)
+                if (s > e) null else (s to e)
+            }
+            // 形式：bytes=Start-
+            startStr.isNotEmpty() -> {
+                val s = startStr.toLongOrNull() ?: return null
+                s to (total - 1)
+            }
+            // 形式：bytes=-SuffixLen
+            endStr.isNotEmpty() -> {
+                val suffix = endStr.toLongOrNull() ?: return null
+                val e = total - 1
+                val s = (total - suffix).coerceAtLeast(0)
+                s to e
+            }
+
+            else -> null
+        }
+    }
+
+    private fun openInline(session: IHTTPSession): Response {
+        val path = session.parameters["path"]?.firstOrNull() ?: return bad("missing path")
+        val file = File(path)
+        if (!file.exists() || !file.isFile) return notFound()
+
+        val total = file.length()
+        val rangeHeader = session.headers["range"]?.lowercase()
+        val mime = guessMime(file) // 用你的 MIME 推断函数
+
+        return if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
+            val range = parseRange(rangeHeader, total)
+            if (range == null) {
+                // Range 无法解析，返回 200 全量
+                val input = FileInputStream(file)
+                newChunkedResponse(Response.Status.OK, mime, input).apply {
+                    addHeader("Content-Length", "$total")
+                    addHeader("Accept-Ranges", "bytes")
+                    addHeader("Cache-Control", "private, max-age=0, no-store")
+                }
+            } else {
+                val (start, end) = range
+                val len = (end - start + 1).coerceAtLeast(0)
+                val input = FileInputStream(file).apply { skip(start) }
+                newChunkedResponse(Response.Status.PARTIAL_CONTENT, mime, input).apply {
+                    addHeader("Content-Range", "bytes $start-$end/$total")
+                    addHeader("Content-Length", "$len")
+                    addHeader("Accept-Ranges", "bytes")
+                    addHeader("Cache-Control", "private, max-age=0, no-store")
+                }
+            }
+        } else {
+            // 无 Range：返回 200 全量（不设置 attachment，供 <img>/<video> 预览）
+            val input = FileInputStream(file)
+            newChunkedResponse(Response.Status.OK, mime, input).apply {
+                addHeader("Content-Length", "$total")
+                addHeader("Accept-Ranges", "bytes")
+                addHeader("Cache-Control", "private, max-age=0, no-store")
+            }
+        }
     }
 
     private fun zipDir(zos: ZipOutputStream, dir: File, base: String) {

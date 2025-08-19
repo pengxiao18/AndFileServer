@@ -1,11 +1,9 @@
 const $ = s => document.querySelector(s), tbody = $("#tbl tbody"), grid = $("#grid");
 
-// ---- 全局状态 ----
-let currentItemsRaw = [];           // 后端原始数据（当前目录）
-let currentItemsFiltered = [];      // 过滤/排序后的数据
-const selection = new Set();        // 选中的 path 集合
+let currentItemsRaw = [];
+let currentItemsFiltered = [];
+const selection = new Set();
 
-// 路径 & 视图 & 主题
 const getPath = ()=>{
   const h = location.hash.slice(1);
   try { return h ? decodeURIComponent(h) : diskDir; } catch { return diskDir; }
@@ -19,7 +17,6 @@ const setView = v => { localStorage.setItem("view", v); updateViewButtons(); app
 const getTheme = ()=> localStorage.getItem("theme") || (window.matchMedia('(prefers-color-scheme: dark)').matches ? "dark" : "light");
 const setTheme = t => { localStorage.setItem("theme", t); document.documentElement.dataset.theme = t; };
 
-// 事件: 路由
 window.addEventListener("hashchange", () => {
   const p = getPath();
   if ($("#p").value !== p) { $("#p").value = p; load(true); }
@@ -51,36 +48,77 @@ function toggleTheme(){
   setTheme(next);
 }
 
-// ---- 加载目录 ----
+// ========== 预览支持 ==========
+function isImageExt(name){
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  return ["jpg","jpeg","png","gif","webp","bmp","heic"].includes(ext);
+}
+function isVideoExt(name){
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  return ["mp4","mkv","avi","mov","wmv","webm"].includes(ext);
+}
+
+function openPreview(item){
+  const modal = document.getElementById('previewModal');
+  const box = document.getElementById('previewContent');
+  const title = document.getElementById('previewTitle');
+  title.textContent = item.name || '预览';
+  box.innerHTML = '';
+
+  if (isImageExt(item.name)) {
+    const img = document.createElement('img');
+    img.src = `/open?path=${encodeURIComponent(item.path)}`;
+    img.alt = item.name;
+    box.appendChild(img);
+  } else if (isVideoExt(item.name)) {
+    const video = document.createElement('video');
+    video.controls = true;
+    video.playsInline = true;
+    video.src = `/open?path=${encodeURIComponent(item.path)}`;
+    box.appendChild(video);
+  } else {
+    const a = document.createElement('a');
+    a.className = 'btn';
+    a.href = `/open?path=${encodeURIComponent(item.path)}`;
+    a.target = '_blank'; a.rel = 'noopener';
+    a.textContent = '在新标签页打开';
+    box.appendChild(a);
+  }
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';   // 防止背景滚动
+}
+function closePreview(){
+  const modal = document.getElementById('previewModal');
+  const box = document.getElementById('previewContent');
+  if (!modal.classList.contains('open')) return;
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
+  const video = box.querySelector('video');
+  if (video) { video.pause(); video.src=''; }
+  box.innerHTML = '';
+  document.body.style.overflow = '';         // 恢复背景滚动
+}
+document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') closePreview(); });
+
+// ========== 加载 & 过滤 & 渲染 ==========
 async function load(skipHash = false){
   const path = $("#p").value;
   if (!skipHash) setHash(path);
-
   const res = await fetch(`/ls?path=${encodeURIComponent(path)}`, {headers:{'X-Token':token}});
   if(!res.ok){ alert(await res.text()); return; }
   const data = await res.json();
-
-  // 重置状态
-  selection.clear();
-  updateBulkbar();
+  selection.clear(); updateBulkbar();
   currentItemsRaw = data;
-  applyFilters(); // 会触发 render
+  applyFilters();
 }
 
-// ---- 过滤 & 排序 ----
 function applyFilters(){
   const path = $("#p").value;
   const q = $("#q").value.trim().toLowerCase();
-  const sortVal = $("#sort").value; // e.g. name.asc
-
+  const sortVal = $("#sort").value;
   let list = [...currentItemsRaw];
-
-  // 搜索：仅按名称匹配
-  if(q){
-    list = list.filter(it => (it.name || '').toLowerCase().includes(q));
-  }
-
-  // 排序
+  if(q){ list = list.filter(it => (it.name || '').toLowerCase().includes(q)); }
   const [key, order] = sortVal.split('.');
   const mul = order === 'asc' ? 1 : -1;
   list.sort((a,b)=>{
@@ -96,7 +134,6 @@ function applyFilters(){
     }
     return 0;
   });
-
   currentItemsFiltered = list;
   render(path, list);
 }
@@ -105,7 +142,6 @@ function parentPath(path){
   return path.replace(/\/+$/,'').split('/').slice(0,-1).join('/') || '/';
 }
 
-// ---- 渲染 ----
 function render(path, list){
   renderList(path, list);
   renderGrid(path, list);
@@ -114,7 +150,6 @@ function render(path, list){
 
 function renderList(path, data){
   tbody.innerHTML='';
-  // 上级目录
   if(path!=='/'){
     const parent = parentPath(path);
     tbody.insertAdjacentHTML('beforeend', `<tr class="row go-up">
@@ -137,26 +172,20 @@ function renderList(path, data){
         <td class="download">-</td>
         <td class="actions"><button class="btn-danger" onclick="del('${it.path}')">删除</button></td></tr>`);
     } else {
-      const size = it.size ?? (it.length ?? '-');
+      const actionsPreview = (isImageExt(it.name) || isVideoExt(it.name))
+        ? `<button class="btn" onclick='openPreview(${JSON.stringify({name: it.name, path: it.path})})'>${isVideoExt(it.name)?'预览/播放':'预览'}</button>`
+        : '';
       tbody.insertAdjacentHTML('beforeend', `<tr class="row">
         <td class="col-check"><input type="checkbox" ${checked} onchange="toggleSelect('${it.path}', this.checked)" aria-label="选择 ${it.name}"></td>
         <td>📄 <span title="${it.name}">${it.name}</span></td>
         <td class="time">${it.lastModified || ''}</td>
-        <td class="size">${size}</td>
-        <td class="download"><a class="btn" href="/dl?path=${encodeURIComponent(it.path)}" target="_blank" rel="noopener">下载</a></td>
+        <td class="size">${it.size ?? (it.length ?? '-')}</td>
+        <td class="download">${actionsPreview} <a class="btn" href="/dl?path=${encodeURIComponent(it.path)}" target="_blank" rel="noopener">下载</a></td>
         <td class="actions"><button class="btn-danger" onclick="del('${it.path}')">删除</button></td></tr>`);
     }
   }
 }
 
-function isImageExt(name){
-  const ext = (name.split('.').pop() || '').toLowerCase();
-  return ["jpg","jpeg","png","gif","webp","bmp","heic"].includes(ext);
-}
-function isVideoExt(name){
-  const ext = (name.split('.').pop() || '').toLowerCase();
-  return ["mp4","mkv","avi","mov","wmv","webm"].includes(ext);
-}
 function iconFor(name, isDir){
   if(isDir) return "📁";
   if(isImageExt(name)) return "🖼️";
@@ -187,13 +216,18 @@ function renderGrid(path, data){
       ? `<img class="thumb" loading="lazy" src="/thumb?path=${encodeURIComponent(it.path)}&w=320&h=200&t=1000" alt="${it.name}">`
       : `<div class="thumb thumb-icon" aria-hidden="true">${isUp ? "⬆️" : iconFor(it.name, it.isDir)}</div>`;
 
-    const subtitle = it.isDir ? "文件夹" : ((it.size ?? it.length) ?? "-");
+    const subtitle = it.isDir ? "文件夹" : (it.size ?? (it.length ?? "-"));
     const time = it.lastModified || "";
+
+    const canPreview = (!it.isDir && !isUp && (isImageExt(it.name) || isVideoExt(it.name)));
+    const previewAction = canPreview
+      ? `<button class="btn" onclick='openPreview(${JSON.stringify({name: it.name, path: it.path})})'>${isVideoExt(it.name)?'播放':'预览'}</button>`
+      : '';
 
     const actions = it.isDir && !isUp
       ? `<button class="btn-danger" onclick="del('${it.path}')">删除</button>`
       : (!it.isDir && !isUp
-          ? `<a class="btn" href="/dl?path=${encodeURIComponent(it.path)}" target="_blank" rel="noopener">下载</a>
+          ? `${previewAction} <a class="btn" href="/dl?path=${encodeURIComponent(it.path)}" target="_blank" rel="noopener">下载</a>
              <button class="btn-danger" onclick="del('${it.path}')">删除</button>`
           : "");
 
@@ -210,17 +244,28 @@ function renderGrid(path, data){
       <div class="file-actions">${actions}</div>
     `;
 
-    // 点击卡片空白处进入目录或无动作；避免与按钮/勾选冲突
     card.addEventListener("click", (e)=>{
       if (e.target.closest(".file-actions") || e.target.closest(".card-check") || e.target.tagName === 'A' || e.target.tagName === 'BUTTON') return;
       if (isUp || it.isDir) { $("#p").value = it.path; load(); }
     });
 
+    // 缩略图点击预览
+    if (!it.isDir && !isUp && (isImageExt(it.name) || isVideoExt(it.name))) {
+      setTimeout(()=>{
+        const thumbEl = card.querySelector('.thumb-wrap');
+        thumbEl.style.cursor = 'zoom-in';
+        thumbEl.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          openPreview({name: it.name, path: it.path});
+        });
+      }, 0);
+    }
+
     grid.appendChild(card);
   }
 }
 
-// ---- 选择 / 批量操作 ----
+// 选择 / 批量操作
 function toggleSelect(path, checked){
   if(checked) selection.add(path); else selection.delete(path);
   updateBulkbar();
@@ -231,7 +276,6 @@ function toggleSelectAll(checked){
   }else{
     currentItemsFiltered.forEach(it => selection.delete(it.path));
   }
-  // 同步 UI
   render(getPath(), currentItemsFiltered);
   updateBulkbar();
 }
@@ -267,7 +311,7 @@ function bulkDownload(){
   }
 }
 
-// ---- 单项操作 ----
+// 单项操作 & 目录操作
 async function del(p){
   if(!confirm('确定删除？')) return;
   await fetch('/rm', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded','X-Token':token}, body:`path=${encodeURIComponent(p)}`});
@@ -282,12 +326,12 @@ async function mkdir(){
 async function upload(){
   const path = document.getElementById('p').value;
   const files = document.getElementById('file').files;
+  if(!files || files.length===0) { alert('请选择文件'); return; }
   const form = new FormData();
   for(const f of files) form.append('file', f, encodeURIComponent(f.name));
   const res = await fetch(`/upload?path=${encodeURIComponent(path)}`, {method:'POST', headers:{'X-Token':token}, body:form});
   alert(await res.text()); load();
 }
-
 async function bulkZip(){
   if(selection.size === 0) return;
   const paths = JSON.stringify(Array.from(selection));
@@ -296,9 +340,7 @@ async function bulkZip(){
     headers:{'Content-Type':'application/x-www-form-urlencoded','X-Token':token},
     body: 'paths='+encodeURIComponent(paths)
   });
-  if(!res.ok){
-    alert(await res.text()); return;
-  }
+  if(!res.ok){ alert(await res.text()); return; }
   const blob = await res.blob();
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);

@@ -1,78 +1,90 @@
 <!doctype html>
 <html>
 <head>
-    <meta charset="utf-8">
-    <title>Android File Server</title>
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <title>Android File Server</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <h1>Android 文件服务</h1>
 
 <div class="toolbar">
-    <div class="path-controls">
-        <label for="p">路径：</label>
-        <input id="p" value="{{rootDir}}" />
-        <button class="btn" onclick="load()">列出</button>
+  <div class="path-controls">
+    <label for="p">路径：</label>
+    <input id="p" value="{{rootDir}}" />
+    <button class="btn" onclick="load()">列出</button>
+  </div>
+  <div class="actions">
+    <div class="left-actions">
+      <input type="file" id="file" multiple/>
+      <button class="btn" onclick="upload()">上传</button>
+      <button class="btn" onclick="mkdir()">新建文件夹</button>
     </div>
-    <div class="actions">
-        <div class="left-actions">
-            <input type="file" id="file" multiple/>
-            <button class="btn" onclick="upload()">上传</button>
-            <button class="btn" onclick="mkdir()">新建文件夹</button>
-        </div>
-        <div class="right-actions">
-            <input id="q" placeholder="搜索名称(支持模糊匹配)" oninput="applyFilters();" />
-            <select id="sort" onchange="applyFilters();" title="排序" aria-label="排序">
-                <option value="name.asc">名称 ↑</option>
-                <option value="name.desc">名称 ↓</option>
-                <option value="time.desc">时间 新→旧</option>
-                <option value="time.asc">时间 旧→新</option>
-                <option value="length.desc">大小 大→小</option>
-                <option value="length.asc">大小 小→大</option>
-            </select>
-            <div class="view-toggle" role="group" aria-label="切换视图">
-                <button id="btnList" class="btn" title="列表视图" aria-pressed="true" onclick="switchView('list')">列表</button>
-                <button id="btnGrid" class="btn" title="网格视图" aria-pressed="false" onclick="switchView('grid')">网格</button>
-            </div>
-            <button id="btnTheme" class="btn" title="切换明暗主题" onclick="toggleTheme()">🌓</button>
-        </div>
+    <div class="right-actions">
+      <input id="q" placeholder="搜索名称(支持模糊匹配)" oninput="applyFilters();" />
+      <select id="sort" onchange="applyFilters();" title="排序" aria-label="排序">
+        <option value="name.asc">名称 ↑</option>
+        <option value="name.desc">名称 ↓</option>
+        <option value="time.desc">时间 新→旧</option>
+        <option value="time.asc">时间 旧→新</option>
+        <option value="length.desc">大小 大→小</option>
+        <option value="length.asc">大小 小→大</option>
+      </select>
+      <div class="view-toggle" role="group" aria-label="切换视图">
+        <button id="btnList" class="btn" title="列表视图" aria-pressed="true" onclick="switchView('list')">列表</button>
+        <button id="btnGrid" class="btn" title="网格视图" aria-pressed="false" onclick="switchView('grid')">网格</button>
+      </div>
+      <button id="btnTheme" class="btn" title="切换明暗主题" onclick="toggleTheme()">🌓</button>
     </div>
+  </div>
 </div>
 
 <!-- 批量操作条 -->
 <div id="bulkbar" class="bulkbar is-hidden" role="region" aria-live="polite">
-    <label class="select-all"><input type="checkbox" id="chkAll" onchange="toggleSelectAll(this.checked)"> 全选</label>
-    <span id="selCount">已选 0 项</span>
-    <div class="bulk-actions">
-        <button class="btn" onclick="bulkZip()">打包下载ZIP</button>
-        <button class="btn" onclick="bulkDownload()">逐个下载</button>
-        <button class="btn-danger" onclick="bulkDelete()">批量删除</button>
-    </div>
+  <label class="select-all"><input type="checkbox" id="chkAll" onchange="toggleSelectAll(this.checked)"> 全选</label>
+  <span id="selCount">已选 0 项</span>
+  <div class="bulk-actions">
+    <button class="btn" onclick="bulkZip()">打包下载ZIP</button>
+    <button class="btn" onclick="bulkDownload()">逐个下载</button>
+    <button class="btn-danger" onclick="bulkDelete()">批量删除</button>
+  </div>
 </div>
 
 <!-- 列表视图 -->
 <table id="tbl" class="view view-list" aria-label="文件列表视图">
-    <thead>
+  <thead>
     <tr>
-        <th class="col-check"><input type="checkbox" id="chkAllList" onchange="toggleSelectAll(this.checked)" aria-label="全选"></th>
-        <th>名称</th>
-        <th>修改时间</th>
-        <th>大小</th>
-        <th>下载</th>
-        <th>删除</th>
+      <th class="col-check"><input type="checkbox" id="chkAllList" onchange="toggleSelectAll(this.checked)" aria-label="全选"></th>
+      <th>名称</th>
+      <th>修改时间</th>
+      <th>大小</th>
+      <th>操作</th>
+      <th>删除</th>
     </tr>
-    </thead>
-    <tbody></tbody>
+  </thead>
+  <tbody></tbody>
 </table>
 
 <!-- 网格视图 -->
 <div id="grid" class="view view-grid file-grid" aria-label="文件网格视图"></div>
 
+<!-- 预览弹层 -->
+<div id="previewModal" class="modal" aria-hidden="true" role="dialog" aria-label="文件预览">
+  <div class="modal-backdrop" onclick="closePreview()"></div>
+  <div class="modal-body" role="document">
+    <div class="modal-header">
+      <div id="previewTitle" class="modal-title">预览</div>
+      <button class="btn" onclick="closePreview()" aria-label="关闭">✕</button>
+    </div>
+    <div id="previewContent" class="modal-content"></div>
+  </div>
+</div>
+
 <script>
-    // 由服务器在返回时把 __TOKEN__ 替换成真实 token
-    window.token = "__TOKEN__";
-    window.diskDir = "{{rootDir}}"
+  // 由服务器在返回时把 __TOKEN__ 替换成真实 token
+  window.token = "__TOKEN__";
+  window.diskDir = "{{rootDir}}"
 </script>
 <script src="main.js"></script>
 </body>
