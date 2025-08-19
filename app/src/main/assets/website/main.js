@@ -351,3 +351,31 @@ async function bulkZip(){
   URL.revokeObjectURL(a.href);
   a.remove();
 }
+
+// keep bottom content visible when bulk bar or footers overlap
+//(function(){
+//  function updateFooterInset(){
+//    var h = 0;
+//    var bb = document.getElementById('bulkbar');
+//    if (bb && !bb.classList.contains('is-hidden')) {
+//      h = bb.offsetHeight || 0;
+//    }
+//    document.documentElement.style.setProperty('--footer-h', (h|10)+'px');
+//  }
+//
+//  window.addEventListener('resize', updateFooterInset);
+//  if (document.readyState === 'loading') {
+//    document.addEventListener('DOMContentLoaded', updateFooterInset);
+//  } else {
+//    updateFooterInset();
+//  }
+//
+//  var bb = document.getElementById('bulkbar');
+//  if (bb && 'MutationObserver' in window) {
+//    var obs = new MutationObserver(updateFooterInset);
+//    obs.observe(bb, { attributes: true, attributeFilter: ['class', 'style'] });
+//  }
+//
+//  // 兜底：某些选择变更可能间接切换 bulkbar
+//  window.addEventListener('selectionchange', function(){ setTimeout(updateFooterInset, 0); });
+//})();

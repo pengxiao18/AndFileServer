@@ -191,4 +191,13 @@ td,th{border-bottom:1px solid var(--border);padding:10px; font-size:14px;}
 
 html, body{ height:100% }
 
-.content-scroll{ flex:1 1 auto; min-height:0; overflow:auto; }
+.content-scroll{
+    flex:1 1 auto; min-height:0; overflow:auto;
+    padding-top:10px;
+    /* 给底部预留空间：动态 footer 高度 + 移动端安全区 + 基础间距 */
+    padding-bottom: calc(14px + var(--footer-h) + env(safe-area-inset-bottom));
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable both-edges;
+}
+
+:root{ --footer-h: 20px; }

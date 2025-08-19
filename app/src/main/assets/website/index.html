@@ -38,20 +38,19 @@
       <button id="btnTheme" class="btn" title="切换明暗主题" onclick="toggleTheme()">🌓</button>
     </div>
   </div>
+  <!-- 批量操作条 -->
+  <div id="bulkbar" class="bulkbar is-hidden" role="region" aria-live="polite">
+    <label class="select-all"><input type="checkbox" id="chkAll" onchange="toggleSelectAll(this.checked)"> 全选</label>
+    <span id="selCount">已选 0 项</span>
+    <div class="bulk-actions">
+      <button class="btn" onclick="bulkZip()">打包下载ZIP</button>
+      <button class="btn" onclick="bulkDownload()">逐个下载</button>
+      <button class="btn-danger" onclick="bulkDelete()">批量删除</button>
+    </div>
+  </div>
 </div>
 
 <div class="content-scroll">
-
-<!-- 批量操作条 -->
-<div id="bulkbar" class="bulkbar is-hidden" role="region" aria-live="polite">
-  <label class="select-all"><input type="checkbox" id="chkAll" onchange="toggleSelectAll(this.checked)"> 全选</label>
-  <span id="selCount">已选 0 项</span>
-  <div class="bulk-actions">
-    <button class="btn" onclick="bulkZip()">打包下载ZIP</button>
-    <button class="btn" onclick="bulkDownload()">逐个下载</button>
-    <button class="btn-danger" onclick="bulkDelete()">批量删除</button>
-  </div>
-</div>
 
 <!-- 列表视图 -->
 <table id="tbl" class="view view-list" aria-label="文件列表视图">
