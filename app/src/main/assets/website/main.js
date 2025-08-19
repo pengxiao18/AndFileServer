@@ -49,46 +49,76 @@ function toggleTheme(){
   setTheme(next);
 }
 
+
 /* ===== 上传相关 UI ===== */
 function bindUploadUI(){
   const file = $("#file");
   const hint = $("#fileHint");
   const dz = $("#dropzone");
+  const inner = dz?.querySelector(".drop-inner");
+
+  const showDZ = () => {
+    dz?.classList.remove("hidden");
+    dz?.setAttribute("aria-hidden","false");
+  };
+  const hideDZ = () => {
+    dz?.classList.add("hidden");
+    dz?.setAttribute("aria-hidden","true");
+  };
 
   file?.addEventListener("change", ()=>{
-    if (!file.files || file.files.length === 0) { hint.textContent = "未选择文件"; return; }
+    if (!file.files || file.files.length === 0) { 
+      hint.textContent = "未选择文件"; 
+      return; 
+    }
     hint.textContent = `已选择 ${file.files.length} 个文件`;
   });
 
-  // 全局拖拽进入/离开
-  let dragDepth = 0;
-  ["dragenter","dragover"].forEach(evt => {
-    document.addEventListener(evt, (e)=>{
-      e.preventDefault();
-      dragDepth++;
-      dz?.classList.remove("hidden");
-      dz?.setAttribute("aria-hidden","false");
-    }, false);
-  });
-  ["dragleave","drop"].forEach(evt => {
-    document.addEventListener(evt, (e)=>{
-      e.preventDefault();
-      dragDepth = Math.max(0, dragDepth-1);
-      if (evt === "drop" || dragDepth === 0){
-        dz?.classList.add("hidden");
-        dz?.setAttribute("aria-hidden","true");
-      }
-    }, false);
+  // 打开遮罩
+  window.addEventListener("dragenter", (e)=>{
+    e.preventDefault();
+    showDZ();
   });
 
-  dz?.addEventListener("drop", (e)=>{
+  // 阻止浏览器默认打开文件
+  window.addEventListener("dragover", (e)=>{
+    e.preventDefault();
+  });
+
+  // 在窗口任意位置 drop/dragend 都要关闭遮罩
+  window.addEventListener("drop", (e)=>{
+    e.preventDefault();
     const files = e.dataTransfer?.files;
-    if (files && files.length){
-      upload(files); // 传入 FileList
+    // 只有当在遮罩层上松手且有文件时才触发上传
+    if (dz && !dz.classList.contains("hidden") && files && files.length && (e.target === dz || dz.contains(e.target))) {
+      upload(files);
+    }
+    hideDZ();
+  });
+
+  window.addEventListener("dragend", ()=>{
+    hideDZ();
+  });
+
+  // 如果鼠标拖拽离开窗口边界，也关闭遮罩
+  document.addEventListener("dragleave", (e)=>{
+    if (e.target === document.documentElement || e.target === document.body) {
+      hideDZ();
     }
   });
-}
 
+  // 点击遮罩任意空白处关闭（避免点不到）
+  dz?.addEventListener("click", (e)=>{
+    if (!inner || !inner.contains(e.target)) {
+      hideDZ();
+    }
+  });
+
+  // ESC 关闭
+  document.addEventListener("keydown", (e)=>{
+    if (e.key === "Escape") hideDZ();
+  });
+}
 function setUploadProgress(percent, metaText){
   const bar = $("#uploadProgress");
   const fill = bar?.querySelector(".fill");
