@@ -27,6 +27,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setTheme(getTheme());
   updateViewButtons();
   applyView(getView());
+  bindUploadUI();
   load(true);
 });
 
@@ -48,7 +49,110 @@ function toggleTheme(){
   setTheme(next);
 }
 
-// ========== 预览支持 ==========
+/* ===== 上传相关 UI ===== */
+function bindUploadUI(){
+  const file = $("#file");
+  const hint = $("#fileHint");
+  const dz = $("#dropzone");
+
+  file?.addEventListener("change", ()=>{
+    if (!file.files || file.files.length === 0) { hint.textContent = "未选择文件"; return; }
+    hint.textContent = `已选择 ${file.files.length} 个文件`;
+  });
+
+  // 全局拖拽进入/离开
+  let dragDepth = 0;
+  ["dragenter","dragover"].forEach(evt => {
+    document.addEventListener(evt, (e)=>{
+      e.preventDefault();
+      dragDepth++;
+      dz?.classList.remove("hidden");
+      dz?.setAttribute("aria-hidden","false");
+    }, false);
+  });
+  ["dragleave","drop"].forEach(evt => {
+    document.addEventListener(evt, (e)=>{
+      e.preventDefault();
+      dragDepth = Math.max(0, dragDepth-1);
+      if (evt === "drop" || dragDepth === 0){
+        dz?.classList.add("hidden");
+        dz?.setAttribute("aria-hidden","true");
+      }
+    }, false);
+  });
+
+  dz?.addEventListener("drop", (e)=>{
+    const files = e.dataTransfer?.files;
+    if (files && files.length){
+      upload(files); // 传入 FileList
+    }
+  });
+}
+
+function setUploadProgress(percent, metaText){
+  const bar = $("#uploadProgress");
+  const fill = bar?.querySelector(".fill");
+  const per = $("#uploadPercent");
+  const meta = $("#uploadMeta");
+  if (!bar || !fill || !per || !meta) return;
+  bar.classList.remove("is-hidden");
+  const p = Math.max(0, Math.min(100, Math.floor(percent)));
+  fill.style.width = p + "%";
+  per.textContent = p + "%";
+  if (metaText) meta.textContent = " · " + metaText;
+  if (p >= 100){
+    setTimeout(()=> bar.classList.add("is-hidden"), 800);
+  }
+}
+
+// 改造 upload 支持原 fetch 方式和 XHR 进度条
+async function upload(passedFiles){
+  const path = document.getElementById('p').value;
+  const input = document.getElementById('file');
+  const files = passedFiles || input.files;
+  if(!files || files.length===0) { alert('请选择文件'); return; }
+
+  const form = new FormData();
+  for(const f of files) form.append('file', f, encodeURIComponent(f.name));
+
+  try{
+    // 优先使用 XHR 以获得进度
+    await new Promise((resolve, reject)=>{
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `/upload?path=${encodeURIComponent(path)}`);
+      xhr.setRequestHeader('X-Token', token);
+      xhr.upload.onprogress = (e)=>{
+        if (e.lengthComputable){
+          const percent = (e.loaded / e.total) * 100;
+          setUploadProgress(percent, `${files.length} 个文件`);
+        }
+      };
+      xhr.onload = ()=> resolve();
+      xhr.onerror = ()=> reject(new Error('网络错误'));
+      xhr.onloadend = async ()=>{
+        try{
+          const text = xhr.responseText || '';
+          alert(text || '上传完成');
+        } finally {
+          setUploadProgress(100, '完成');
+          load();
+        }
+      };
+      xhr.send(form);
+    });
+  } catch (e){
+    // 退化到 fetch
+    const res = await fetch(`/upload?path=${encodeURIComponent(path)}`, {method:'POST', headers:{'X-Token':token}, body:form});
+    alert(await res.text());
+    load();
+  } finally {
+    input.value = "";
+    const hint = $("#fileHint");
+    if (hint) hint.textContent = "未选择文件";
+  }
+}
+
+/* ===== 预览支持（保持原有） ===== */
 function isImageExt(name){
   const ext = (name.split('.').pop() || '').toLowerCase();
   return ["jpg","jpeg","png","gif","webp","bmp","heic"].includes(ext);
@@ -87,7 +191,7 @@ function openPreview(item){
   }
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
-  document.body.style.overflow = 'hidden';   // 防止背景滚动
+  document.body.style.overflow = 'hidden';
 }
 function closePreview(){
   const modal = document.getElementById('previewModal');
@@ -98,11 +202,11 @@ function closePreview(){
   const video = box.querySelector('video');
   if (video) { video.pause(); video.src=''; }
   box.innerHTML = '';
-  document.body.style.overflow = '';         // 恢复背景滚动
+  document.body.style.overflow = '';
 }
 document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') closePreview(); });
 
-// ========== 加载 & 过滤 & 渲染 ==========
+/* ===== 加载 & 过滤 & 渲染（保持原有） ===== */
 async function load(skipHash = false){
   const path = $("#p").value;
   if (!skipHash) setHash(path);
@@ -140,7 +244,7 @@ function applyFilters(){
 }
 
 function parentPath(path){
-  return path.replace(/\/+$/,'').split('/').slice(0,-1).join('/') || '/';
+  return path.replace(/\/+/,'').replace(/\/+$/,'').split('/').slice(0,-1).join('/') || '/';
 }
 
 function render(path, list){
@@ -250,7 +354,6 @@ function renderGrid(path, data){
       if (isUp || it.isDir) { $("#p").value = it.path; load(); }
     });
 
-    // 缩略图点击预览
     if (!it.isDir && !isUp && (isImageExt(it.name) || isVideoExt(it.name))) {
       setTimeout(()=>{
         const thumbEl = card.querySelector('.thumb-wrap');
@@ -266,7 +369,7 @@ function renderGrid(path, data){
   }
 }
 
-// 选择 / 批量操作
+/* 选择 / 批量操作（保持原有） */
 function toggleSelect(path, checked){
   if(checked) selection.add(path); else selection.delete(path);
   updateBulkbar();
@@ -312,7 +415,6 @@ function bulkDownload(){
   }
 }
 
-// 单项操作 & 目录操作
 async function del(p){
   if(!confirm('确定删除？')) return;
   await fetch('/rm', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded','X-Token':token}, body:`path=${encodeURIComponent(p)}`});
@@ -324,15 +426,8 @@ async function mkdir(){
   await fetch('/mkdir', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded','X-Token':token}, body:`path=${encodeURIComponent(path)}&name=${encodeURIComponent(name)}`});
   load();
 }
-async function upload(){
-  const path = document.getElementById('p').value;
-  const files = document.getElementById('file').files;
-  if(!files || files.length===0) { alert('请选择文件'); return; }
-  const form = new FormData();
-  for(const f of files) form.append('file', f, encodeURIComponent(f.name));
-  const res = await fetch(`/upload?path=${encodeURIComponent(path)}`, {method:'POST', headers:{'X-Token':token}, body:form});
-  alert(await res.text()); load();
-}
+
+// 保留 fetch 版本的 zip；无需改动
 async function bulkZip(){
   if(selection.size === 0) return;
   const paths = JSON.stringify(Array.from(selection));
@@ -351,31 +446,3 @@ async function bulkZip(){
   URL.revokeObjectURL(a.href);
   a.remove();
 }
-
-// keep bottom content visible when bulk bar or footers overlap
-//(function(){
-//  function updateFooterInset(){
-//    var h = 0;
-//    var bb = document.getElementById('bulkbar');
-//    if (bb && !bb.classList.contains('is-hidden')) {
-//      h = bb.offsetHeight || 0;
-//    }
-//    document.documentElement.style.setProperty('--footer-h', (h|10)+'px');
-//  }
-//
-//  window.addEventListener('resize', updateFooterInset);
-//  if (document.readyState === 'loading') {
-//    document.addEventListener('DOMContentLoaded', updateFooterInset);
-//  } else {
-//    updateFooterInset();
-//  }
-//
-//  var bb = document.getElementById('bulkbar');
-//  if (bb && 'MutationObserver' in window) {
-//    var obs = new MutationObserver(updateFooterInset);
-//    obs.observe(bb, { attributes: true, attributeFilter: ['class', 'style'] });
-//  }
-//
-//  // 兜底：某些选择变更可能间接切换 bulkbar
-//  window.addEventListener('selectionchange', function(){ setTimeout(updateFooterInset, 0); });
-//})();

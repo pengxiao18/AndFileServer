@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="zh">
 <head>
   <meta charset="utf-8">
   <title>Android File Server</title>
@@ -7,22 +7,41 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<h1>Android 文件服务</h1>
+<header class="app-header">
+  <div class="brand">
+    <span class="logo">📱</span>
+    <h1>Android 文件服务</h1>
+  </div>
 
-<div class="toolbar">
+  <div class="quick-actions">
+    <button id="btnTheme" class="btn icon" title="切换明暗主题" onclick="toggleTheme()">🌓</button>
+  </div>
+</header>
+
+<div class="toolbar sticky glass">
   <div class="path-controls">
-    <label for="p">路径：</label>
+    <label for="p" class="label">路径</label>
     <input id="p" value="{{rootDir}}" />
     <button class="btn" onclick="load()">列出</button>
   </div>
+
   <div class="actions">
-    <div class="left-actions">
-      <input type="file" id="file" multiple/>
-      <button class="btn" onclick="upload()">上传</button>
+    <div class="left-actions upload-group">
+      <input type="file" id="file" class="input-file" multiple/>
+      <label for="file" class="btn">
+        <span class="icon">⬆️</span><span>选择文件</span>
+      </label>
+      <span id="fileHint" class="file-hint">未选择文件</span>
+      <button class="btn" onclick="upload()" title="上传所选文件">上传</button>
+      <div class="divider"></div>
       <button class="btn" onclick="mkdir()">新建文件夹</button>
     </div>
+
     <div class="right-actions">
-      <input id="q" placeholder="搜索名称(支持模糊匹配)" oninput="applyFilters();" />
+      <div class="search-wrap">
+        <span class="icon">🔎</span>
+        <input id="q" placeholder="搜索名称(支持模糊匹配)" oninput="applyFilters();" />
+      </div>
       <select id="sort" onchange="applyFilters();" title="排序" aria-label="排序">
         <option value="name.asc">名称 ↑</option>
         <option value="name.desc">名称 ↓</option>
@@ -35,9 +54,15 @@
         <button id="btnList" class="btn" title="列表视图" aria-pressed="true" onclick="switchView('list')">列表</button>
         <button id="btnGrid" class="btn" title="网格视图" aria-pressed="false" onclick="switchView('grid')">网格</button>
       </div>
-      <button id="btnTheme" class="btn" title="切换明暗主题" onclick="toggleTheme()">🌓</button>
     </div>
   </div>
+
+  <!-- 上传进度 -->
+  <div id="uploadProgress" class="upload-progress is-hidden" role="status" aria-live="polite">
+    <div class="bar"><div class="fill" style="width:0%"></div></div>
+    <div class="meta"><span id="uploadPercent">0%</span><span id="uploadMeta"></span></div>
+  </div>
+
   <!-- 批量操作条 -->
   <div id="bulkbar" class="bulkbar is-hidden" role="region" aria-live="polite">
     <label class="select-all"><input type="checkbox" id="chkAll" onchange="toggleSelectAll(this.checked)"> 全选</label>
@@ -50,26 +75,32 @@
   </div>
 </div>
 
+<!-- 拖拽上传提示层 -->
+<div id="dropzone" class="dropzone hidden" aria-hidden="true">
+  <div class="drop-inner">
+    <div class="icon">⬆️</div>
+    <div class="text">拖拽文件到此处上传</div>
+  </div>
+</div>
+
 <div class="content-scroll">
+  <!-- 列表视图 -->
+  <table id="tbl" class="view view-list" aria-label="文件列表视图">
+    <thead>
+      <tr>
+        <th class="col-check"><input type="checkbox" id="chkAllList" onchange="toggleSelectAll(this.checked)" aria-label="全选"></th>
+        <th>名称</th>
+        <th>修改时间</th>
+        <th>大小</th>
+        <th>操作</th>
+        <th>删除</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
-<!-- 列表视图 -->
-<table id="tbl" class="view view-list" aria-label="文件列表视图">
-  <thead>
-    <tr>
-      <th class="col-check"><input type="checkbox" id="chkAllList" onchange="toggleSelectAll(this.checked)" aria-label="全选"></th>
-      <th>名称</th>
-      <th>修改时间</th>
-      <th>大小</th>
-      <th>操作</th>
-      <th>删除</th>
-    </tr>
-  </thead>
-  <tbody></tbody>
-</table>
-
-<!-- 网格视图 -->
-<div id="grid" class="view view-grid file-grid" aria-label="文件网格视图"></div>
-
+  <!-- 网格视图 -->
+  <div id="grid" class="view view-grid file-grid" aria-label="文件网格视图"></div>
 </div>
 
 <!-- 预览弹层 -->
@@ -85,7 +116,6 @@
 </div>
 
 <script>
-  // 由服务器在返回时把 __TOKEN__ 替换成真实 token
   window.token = "__TOKEN__";
   window.diskDir = "{{rootDir}}"
 </script>
