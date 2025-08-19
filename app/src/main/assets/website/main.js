@@ -704,3 +704,80 @@ async function bulkZip(){
   URL.revokeObjectURL(a.href);
   a.remove();
 }
+
+/* ===== Injected Helpers & downloadFile Override (optimized) ===== */
+/*(function(){
+  if (!document.querySelector) return;
+  const $ = s => document.querySelector(s);
+  function _fmtBytes(n){
+    if (typeof n !== 'number' || !isFinite(n) || n < 0) return '-';
+    const units = ['B','KB','MB','GB','TB'];
+    let u = 0, x = n;
+    while (x >= 1024 && u < units.length-1){ x /= 1024; u++; }
+    return (x >= 100 || u === 0 ? Math.round(x) : (x >= 10 ? x.toFixed(1) : x.toFixed(2))) + ' ' + units[u];
+  }
+  function _ensureToast(){
+    let t = document.getElementById('download-progress-toast');
+    if (t) return t;
+    t = document.createElement('div');
+    t.id = 'download-progress-toast';
+    t.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;background:#111;color:#fff;border-radius:10px;padding:8px 12px;box-shadow:0 8px 24px rgba(0,0,0,.35);font:13px/1.4 system-ui,Segoe UI,Roboto;opacity:.95;';
+    document.body.appendChild(t);
+    return t;
+  }
+  function _flashToast(msg, ms){
+    ms = typeof ms === 'number' ? ms : 1200;
+    const t = _ensureToast();
+    t.textContent = msg;
+    clearTimeout(_flashToast._tid);
+    _flashToast._tid = setTimeout(function(){ try{ t.remove(); }catch(_){ } }, ms);
+  }
+  let _bulkCtx = null;
+  function _ensurePanel(){
+    let panel = document.getElementById('download-progress-panel');
+    if (panel) return panel;
+    panel = document.createElement('div');
+    panel.id = 'download-progress-panel';
+    panel.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;min-width:260px;max-width:420px;background:#111;color:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.35);padding:14px 16px;font:14px/1.4 system-ui,Segoe UI,Roboto';
+    panel.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><strong>批量下载</strong><button id="bulk-cancel-btn" class="btn" style="background:#333;color:#fff;border:none;border-radius:8px;padding:6px 10px;cursor:pointer">取消</button></div><div id="bulk-file" style="word-break:break-all;margin-bottom:6px;opacity:.9"></div><div id="bulk-meta" style="font-size:12px;opacity:.8;margin-bottom:8px"></div><div style="background:#333;border-radius:8px;height:8px;overflow:hidden;"><div id="bulk-bar" style="height:8px;width:0%;background:#4ade80;"></div></div>';
+    document.body.appendChild(panel);
+    document.getElementById('bulk-cancel-btn').onclick = function(){ if (_bulkCtx) _bulkCtx.canceled = true; };
+    return panel;
+  }
+  function _updatePanel(name, fileIndex, total, doneBytes, totalBytes){
+    const panel = _ensurePanel();
+    panel.querySelector('#bulk-file').textContent = name || '';
+    const percent = totalBytes > 0 ? Math.min(100, Math.round(doneBytes/totalBytes*100)) : Math.round(fileIndex/Math.max(1,total)*100);
+    panel.querySelector('#bulk-meta').textContent = "进度：" + fileIndex + "/" + total + " | " + _fmtBytes(doneBytes) + " / " + _fmtBytes(totalBytes) + " (" + percent + "%)";
+    panel.querySelector('#bulk-bar').style.width = percent + '%';
+  }
+  function _finishPanel(msg){
+    msg = msg || '下载完成 ✅';
+    const panel = _ensurePanel();
+    panel.querySelector('#bulk-file').textContent = '';
+    panel.querySelector('#bulk-meta').textContent = msg;
+    panel.querySelector('#bulk-bar').style.width = '100%';
+    setTimeout(function(){ try{ panel.remove(); }catch(_){ } }, 1500);
+  }
+  var _downloadFrame = null;
+  function ensureDownloadFrame(){
+    if(!_downloadFrame){
+      _downloadFrame = document.createElement('iframe');
+      _downloadFrame.style.display = 'none';
+      _downloadFrame.setAttribute('aria-hidden','true');
+      document.body.appendChild(_downloadFrame);
+    }
+    return _downloadFrame;
+  }
+  // Override (idempotent): make it predictable and side-effect free
+  window.downloadFile = function(path){
+    try{
+      var name = String(path).split('/').pop() || path;
+      _flashToast('准备下载：' + name);
+    }catch(_){}
+    var frame = ensureDownloadFrame();
+    frame.src = '/dl?path=' + encodeURIComponent(path);
+    setTimeout(function(){ try{ _downloadFrame.removeAttribute('src'); }catch(_){} }, 1500);
+  };
+})();*/
+/* ===== End Injected Helpers ===== */
