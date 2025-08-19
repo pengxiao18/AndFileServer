@@ -48,6 +48,11 @@ class FileHttpServer(
                 uri.endsWith(".html") -> serveHtml(uri.trimStart('/'))
                 uri.endsWith(".css") -> serveAsset(uri.trimStart('/'), "text/css")
                 uri.endsWith(".js") -> serveAsset(uri.trimStart('/'), "application/javascript")
+
+                uri.endsWith(".ico") -> serveBinaryAsset(uri.trimStart('/'), "image/x-icon", true)
+                uri.endsWith(".png") -> serveBinaryAsset(uri.trimStart('/'), "image/png", true)
+                uri.endsWith(".svg") -> serveAsset(uri.trimStart('/'), "image/svg+xml") // SVG 可走文本
+
                 uri.startsWith("/ls") -> listDir(session)
                 uri.startsWith("/dl") -> download(session)
                 uri.startsWith("/upload") -> upload(session)
@@ -97,6 +102,34 @@ class FileHttpServer(
 
     private fun loadTextAsset(name: String): String =
         context.assets.open(name).bufferedReader(Charsets.UTF_8).use { it.readText() }
+
+    private fun serveBinaryAsset(
+        name: String,
+        mime: String,
+        cacheForever: Boolean = false
+    ): Response {
+        return try {
+            val filePath = if (!webDir.endsWith("/") && !name.startsWith("/")) {
+                "$webDir/$name"
+            } else {
+                "$webDir$name"
+            }
+            val ins = context.assets.open(filePath)
+            val bytes = ins.use { it.readBytes() }
+            val resp = newFixedLengthResponse(
+                Response.Status.OK,
+                mime,
+                bytes.inputStream(),
+                bytes.size.toLong()
+            )
+            if (cacheForever) {
+                resp.addHeader("Cache-Control", "public, max-age=31536000, immutable")
+            }
+            resp
+        } catch (_: Exception) {
+            text(Response.Status.NOT_FOUND, "Asset not found: $name")
+        }
+    }
 
     private fun listDir(session: IHTTPSession): Response {
         val path = session.parameters["path"]?.firstOrNull() ?: rootDir
@@ -351,6 +384,7 @@ class FileHttpServer(
                 if (r >= 0) remaining--
                 return r
             }
+
             override fun read(b: ByteArray, off: Int, len: Int): Int {
                 if (remaining <= 0) return -1
                 val toRead = if (len.toLong() > remaining) remaining.toInt() else len

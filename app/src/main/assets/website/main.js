@@ -390,9 +390,9 @@ function renderGrid(path, data){
     const isUp = it.name === "..";
     const checked = selection.has(it.path);
     const thumb = (!isUp && isImageExt(it.name) && !it.isDir)
-      ? `<img class="thumb" loading="lazy" src="/thumb?path=${encodeURIComponent(it.path)}&w=220&h=140" alt="${it.name}">`
+      ? `<img class="thumb" loading="lazy" src="/thumb?path=${encodeURIComponent(it.path)}&w=300&h=300" alt="${it.name}">`
       : (!isUp && isVideoExt(it.name) && !it.isDir)
-      ? `<img class="thumb" loading="lazy" src="/thumb?path=${encodeURIComponent(it.path)}&w=220&h=140&t=1000" alt="${it.name}">`
+      ? `<img class="thumb" loading="lazy" src="/thumb?path=${encodeURIComponent(it.path)}&w=300&h=300&t=1000" alt="${it.name}">`
       : `<div class="thumb thumb-icon" aria-hidden="true">${isUp ? "⬆️" : iconFor(it.name, it.isDir)}</div>`;
 
     const subtitle = it.isDir ? "文件夹" : (it.size ?? (it.length ?? "-"));
