@@ -127,24 +127,42 @@ class FileHttpServer(
         val file = File(path)
         if (!file.exists() || !file.isFile) return notFound()
 
-        // 支持 Range（断点续传）
         val total = file.length()
-        val rangeHeader = session.headers["range"]
-        val input = FileInputStream(file)
+        val mime = guessMime(file)
+        val rangeHeader = session.headers["range"]?.lowercase()
+        val fis = FileInputStream(file)
+
         return if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
-            val range = rangeHeader.removePrefix("bytes=").split("-")
-            val start = range[0].toLong()
-            val end = (range.getOrNull(1)?.toLong()) ?: (total - 1)
-            input.skip(start)
-            newChunkedResponse(Response.Status.PARTIAL_CONTENT, guessMime(file), input).apply {
-                addHeader("Content-Range", "bytes $start-$end/$total")
-                addHeader("Accept-Ranges", "bytes")
+            // 解析 Range
+            val rangePair = parseRange(rangeHeader, total)
+            if (rangePair == null) {
+                // 解析失败则整文件 200
+                val resp = newFixedLengthResponse(Response.Status.OK, mime, fis, total)
+                resp.addHeader("Accept-Ranges", "bytes")
+                resp.addHeader("Content-Disposition", "attachment; filename=\"${file.name}\"")
+                resp
+            } else {
+                val (start, end) = rangePair
+                val len = (end - start + 1).coerceAtLeast(0)
+                // 定位到起点，并用 boundedInput 限制长度
+                fis.skip(start)
+                val resp = newFixedLengthResponse(
+                    Response.Status.PARTIAL_CONTENT,
+                    mime,
+                    boundedInput(fis, len),
+                    len
+                )
+                resp.addHeader("Content-Range", "bytes $start-$end/$total")
+                resp.addHeader("Accept-Ranges", "bytes")
+                resp.addHeader("Content-Disposition", "attachment; filename=\"${file.name}\"")
+                resp
             }
         } else {
-            newChunkedResponse(Response.Status.OK, guessMime(file), input).apply {
-                addHeader("Content-Length", "$total")
-                addHeader("Content-Disposition", "attachment; filename=\"${file.name}\"")
-            }
+            // 无 Range，返回完整文件（定长）
+            val resp = newFixedLengthResponse(Response.Status.OK, mime, fis, total)
+            resp.addHeader("Accept-Ranges", "bytes")
+            resp.addHeader("Content-Disposition", "attachment; filename=\"${file.name}\"")
+            resp
         }
     }
 
@@ -324,44 +342,62 @@ class FileHttpServer(
         }
     }
 
+    private fun boundedInput(input: FileInputStream, limit: Long): java.io.InputStream {
+        return object : java.io.FilterInputStream(input) {
+            var remaining = limit
+            override fun read(): Int {
+                if (remaining <= 0) return -1
+                val r = super.read()
+                if (r >= 0) remaining--
+                return r
+            }
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                if (remaining <= 0) return -1
+                val toRead = if (len.toLong() > remaining) remaining.toInt() else len
+                val r = super.read(b, off, toRead)
+                if (r > 0) remaining -= r
+                return r
+            }
+        }
+    }
+
     private fun openInline(session: IHTTPSession): Response {
         val path = session.parameters["path"]?.firstOrNull() ?: return bad("missing path")
         val file = File(path)
         if (!file.exists() || !file.isFile) return notFound()
 
         val total = file.length()
+        val mime = guessMime(file)
         val rangeHeader = session.headers["range"]?.lowercase()
-        val mime = guessMime(file) // 用你的 MIME 推断函数
+        val fis = FileInputStream(file)
 
         return if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
             val range = parseRange(rangeHeader, total)
             if (range == null) {
-                // Range 无法解析，返回 200 全量
-                val input = FileInputStream(file)
-                newChunkedResponse(Response.Status.OK, mime, input).apply {
-                    addHeader("Content-Length", "$total")
-                    addHeader("Accept-Ranges", "bytes")
-                    addHeader("Cache-Control", "private, max-age=0, no-store")
-                }
+                val resp = newFixedLengthResponse(Response.Status.OK, mime, fis, total)
+                resp.addHeader("Accept-Ranges", "bytes")
+                resp.addHeader("Cache-Control", "private, max-age=0, no-store")
+                resp
             } else {
                 val (start, end) = range
                 val len = (end - start + 1).coerceAtLeast(0)
-                val input = FileInputStream(file).apply { skip(start) }
-                newChunkedResponse(Response.Status.PARTIAL_CONTENT, mime, input).apply {
-                    addHeader("Content-Range", "bytes $start-$end/$total")
-                    addHeader("Content-Length", "$len")
-                    addHeader("Accept-Ranges", "bytes")
-                    addHeader("Cache-Control", "private, max-age=0, no-store")
-                }
+                fis.skip(start)
+                val resp = newFixedLengthResponse(
+                    Response.Status.PARTIAL_CONTENT,
+                    mime,
+                    boundedInput(fis, len),
+                    len
+                )
+                resp.addHeader("Content-Range", "bytes $start-$end/$total")
+                resp.addHeader("Accept-Ranges", "bytes")
+                resp.addHeader("Cache-Control", "private, max-age=0, no-store")
+                resp
             }
         } else {
-            // 无 Range：返回 200 全量（不设置 attachment，供 <img>/<video> 预览）
-            val input = FileInputStream(file)
-            newChunkedResponse(Response.Status.OK, mime, input).apply {
-                addHeader("Content-Length", "$total")
-                addHeader("Accept-Ranges", "bytes")
-                addHeader("Cache-Control", "private, max-age=0, no-store")
-            }
+            val resp = newFixedLengthResponse(Response.Status.OK, mime, fis, total)
+            resp.addHeader("Accept-Ranges", "bytes")
+            resp.addHeader("Cache-Control", "private, max-age=0, no-store")
+            resp
         }
     }
 

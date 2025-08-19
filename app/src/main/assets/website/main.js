@@ -74,6 +74,7 @@ function openPreview(item){
     const video = document.createElement('video');
     video.controls = true;
     video.playsInline = true;
+    video.preload = 'metadata';
     video.src = `/open?path=${encodeURIComponent(item.path)}`;
     box.appendChild(video);
   } else {
@@ -173,7 +174,7 @@ function renderList(path, data){
         <td class="actions"><button class="btn-danger" onclick="del('${it.path}')">删除</button></td></tr>`);
     } else {
       const actionsPreview = (isImageExt(it.name) || isVideoExt(it.name))
-        ? `<button class="btn" onclick='openPreview(${JSON.stringify({name: it.name, path: it.path})})'>${isVideoExt(it.name)?'预览/播放':'预览'}</button>`
+        ? `<button class="btn" onclick='openPreview(${JSON.stringify({name: it.name, path: it.path})})'>${isVideoExt(it.name)?'播放':'预览'}</button>`
         : '';
       tbody.insertAdjacentHTML('beforeend', `<tr class="row">
         <td class="col-check"><input type="checkbox" ${checked} onchange="toggleSelect('${it.path}', this.checked)" aria-label="选择 ${it.name}"></td>

@@ -162,7 +162,9 @@ td,th{border-bottom:1px solid var(--border);padding:10px; font-size:14px;}
 /* 关键：内容区域可缩放且不溢出 */
 .modal-content{
   flex: 1 1 auto;
-  max-height: calc(90vh - 56px); /* 56≈header+padding  */
+  /* 明确高度，让内部媒体能用 100%/100% 配合 object-fit:contain 进行缩放 */
+  height: calc(90vh - 56px);      /* 56≈头部+内边距 */
+  max-height: none;
   display:flex; align-items:center; justify-content:center;
   background:var(--bg);
   border:1px dashed var(--border);
@@ -171,15 +173,16 @@ td,th{border-bottom:1px solid var(--border);padding:10px; font-size:14px;}
 
 /* 关键：图片/视频按 contain 缩放并限制最大宽高 */
 .modal-content img, .modal-content video{
-  max-width: 100%;
-  max-height: 100%;
-  width: auto; height: auto;
-  object-fit: contain; display:block;
+  /* 让媒体占满可用展示区，再用 contain 保持比例完整展示（不裁剪） */
+  width: 100%; height: 100%;
+  max-width: 100%; max-height: 100%;
+  object-fit: contain;
+  display:block;
 }
 
 /* 小屏优化 */
 @media (max-width: 640px){
   .modal-body{ margin: 2vh auto; max-width: 96vw; max-height: 96vh; }
-  .modal-content{ max-height: calc(96vh - 56px); }
+  .modal-content{ height: calc(96vh - 56px); max-height: none; }
 }
 
