@@ -476,13 +476,14 @@ function renderList(path, data){
   }
   for(const it of data){
     const checked = selection.has(it.path) ? 'checked' : '';
+    const renameBtn = `<button class="btn" onclick='renameItem(${JSON.stringify(it.path)}, ${JSON.stringify(it.name)})'>重命名</button>`;
     if(it.isDir){
       tbody.insertAdjacentHTML('beforeend', `<tr class="row">
         <td class="col-check"><input type="checkbox" ${checked} onchange="toggleSelect('${it.path}', this.checked)" aria-label="选择 ${it.name}"></td>
         <td>📁 <a href="#" onclick="document.getElementById('p').value='${it.path}';load();return false;" title="${it.name}">${it.name}</a></td>
         <td class="time">${it.lastModified || ''}</td>
         <td class="size">-</td>
-        <td class="download">-</td>
+        <td class="download">${renameBtn}</td>
         <td class="actions"><button class="btn-danger" onclick="del('${it.path}')">删除</button></td></tr>`);
     } else {
       const actionsPreview = (isImageExt(it.name) || isVideoExt(it.name))
@@ -493,7 +494,7 @@ function renderList(path, data){
         <td>📄 <span title="${it.name}">${it.name}</span></td>
         <td class="time">${it.lastModified || ''}</td>
         <td class="size">${it.size ?? (it.length ?? '-')}</td>
-        <td class="download">${actionsPreview} <button class="btn" onclick='downloadFile(${JSON.stringify(it.path)})'>下载</button></td>
+        <td class="download">${actionsPreview} <button class="btn" onclick='downloadFile(${JSON.stringify(it.path)})'>下载</button> ${renameBtn}</td>
         <td class="actions"><button class="btn-danger" onclick="del('${it.path}')">删除</button></td></tr>`);
     }
   }
@@ -537,12 +538,15 @@ function renderGrid(path, data){
       ? `<button class="btn" onclick='openPreview(${JSON.stringify({name: it.name, path: it.path})})'>${isVideoExt(it.name)?'播放':'预览'}</button>`
       : '';
 
-    const actions = it.isDir && !isUp
-      ? `<button class="btn-danger" onclick="del('${it.path}')">删除</button>`
-      : (!it.isDir && !isUp
-          ? `${previewAction} <button class="btn" onclick='downloadFile(${JSON.stringify(it.path)})'>下载</button>
-             <button class="btn-danger" onclick="del('${it.path}')">删除</button>`
-          : "");
+    const renameBtn = !isUp ? `<button class="btn" onclick='renameItem(${JSON.stringify(it.path)}, ${JSON.stringify(it.name)})'>重命名</button>` : '';
+    const deleteBtn = !isUp ? `<button class="btn-danger" onclick='del(${JSON.stringify(it.path)})'>删除</button>` : '';
+    const downloadBtn = `<button class="btn" onclick='downloadFile(${JSON.stringify(it.path)})'>下载</button>`;
+    let actions = "";
+    if (it.isDir && !isUp) {
+      actions = [renameBtn, deleteBtn].filter(Boolean).join(' ');
+    } else if (!it.isDir && !isUp) {
+      actions = [previewAction, downloadBtn, renameBtn, deleteBtn].filter(Boolean).join(' ');
+    }
 
     const card = document.createElement("div");
     card.className = "file-card";
@@ -682,6 +686,26 @@ async function mkdir(){
   const path = document.getElementById('p').value;
   const name = prompt('文件夹名'); if(!name) return;
   await fetch('/mkdir', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded','X-Token':token}, body:`path=${encodeURIComponent(path)}&name=${encodeURIComponent(name)}`});
+  load();
+}
+
+async function renameItem(path, currentName){
+  const next = prompt('重命名为', currentName || '');
+  if (next === null) return;
+  const trimmed = next.trim();
+  if (!trimmed){
+    alert('名称不能为空');
+    return;
+  }
+  const res = await fetch('/rename', {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded','X-Token':token},
+    body:`path=${encodeURIComponent(path)}&name=${encodeURIComponent(trimmed)}`
+  });
+  if(!res.ok){
+    alert(await res.text());
+    return;
+  }
   load();
 }
 

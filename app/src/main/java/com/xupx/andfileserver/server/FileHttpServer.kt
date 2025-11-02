@@ -75,6 +75,7 @@ class FileHttpServer(
                 uri.startsWith("/upload") -> upload(session)
                 uri.startsWith("/mkdir") -> mkdir(session)
                 uri.startsWith("/rm") -> delete(session)
+                uri.startsWith("/rename") -> rename(session)
                 uri.startsWith("/mv") -> move(session)
                 uri.startsWith("/thumb") -> thumb(session)
                 uri.startsWith("/zip") -> zip(session)
@@ -285,6 +286,34 @@ class FileHttpServer(
             ?: return bad("invalid path")
         if (!f.exists()) return notFound()
         f.deleteRecursively()
+        return ok("ok")
+    }
+
+    private fun rename(session: IHTTPSession): Response {
+        if (session.method == Method.POST) session.parseBody(HashMap())
+        val target = safeResolve(session.parameters["path"]?.firstOrNull() ?: return bad("missing path"))
+            ?: return bad("invalid path")
+        if (!target.exists()) return notFound()
+        val nameParam = session.parameters["name"]?.firstOrNull() ?: return bad("missing name")
+        val sanitized = sanitizedFileName(nameParam).trim()
+        if (sanitized.isEmpty()) return bad("invalid name")
+        if (target.name == sanitized) return ok("ok")
+        val parent = target.parentFile ?: return bad("invalid target")
+        val dest = File(parent, sanitized)
+        val destSafe = safeResolve(dest.absolutePath) ?: return bad("invalid name")
+        if (destSafe.exists()) return bad("target exists")
+
+        val renamed = target.renameTo(destSafe)
+        if (!renamed) {
+            try {
+                if (target.isDirectory) target.copyRecursively(destSafe, overwrite = true)
+                else target.copyTo(destSafe, overwrite = true)
+                target.deleteRecursively()
+            } catch (e: Exception) {
+                destSafe.deleteRecursively()
+                return text(Status.INTERNAL_ERROR, "rename failed: ${e.message}")
+            }
+        }
         return ok("ok")
     }
 
