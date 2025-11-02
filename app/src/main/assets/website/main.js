@@ -139,6 +139,7 @@ let currentItemsFiltered = [];
 const selection = new Set();
 let previewItems = [];
 let currentPreviewIndex = -1;
+let activeImageZoom = null;
 
 const getPath = ()=>{
   const h = location.hash.slice(1);
@@ -360,6 +361,164 @@ function isVideoExt(name){
   return ["mp4","mkv","avi","mov","wmv","webm"].includes(ext);
 }
 
+function disposeActiveImageZoom(){
+  if (!activeImageZoom) return;
+  const { wrap, onWheel, onPointerDown, onPointerMove, onPointerUp, onLostCapture, onDblClick } = activeImageZoom;
+  wrap.removeEventListener('wheel', onWheel);
+  wrap.removeEventListener('pointerdown', onPointerDown);
+  wrap.removeEventListener('pointermove', onPointerMove);
+  wrap.removeEventListener('pointerup', onPointerUp);
+  wrap.removeEventListener('pointercancel', onPointerUp);
+  wrap.removeEventListener('lostpointercapture', onLostCapture);
+  wrap.removeEventListener('dblclick', onDblClick);
+  activeImageZoom = null;
+}
+
+function setupImageZoom(img){
+  disposeActiveImageZoom();
+  const wrap = document.createElement('div');
+  wrap.className = 'preview-zoom-wrap';
+  wrap.appendChild(img);
+
+  const state = {
+    scale: 1,
+    minScale: 1,
+    maxScale: 6,
+    translateX: 0,
+    translateY: 0,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    startTX: 0,
+    startTY: 0
+  };
+
+  const clamp = (val, min, max) => Math.min(max, Math.max(min, val));
+
+  const getBounds = () => {
+    const rect = wrap.getBoundingClientRect();
+    const naturalW = img.naturalWidth || rect.width || 1;
+    const naturalH = img.naturalHeight || rect.height || 1;
+    const scaledW = naturalW * state.scale;
+    const scaledH = naturalH * state.scale;
+    const maxX = Math.max(0, (scaledW - rect.width) / 2);
+    const maxY = Math.max(0, (scaledH - rect.height) / 2);
+    return { maxX, maxY };
+  };
+
+  const clampTranslation = () => {
+    const { maxX, maxY } = getBounds();
+    state.translateX = clamp(state.translateX, -maxX, maxX);
+    state.translateY = clamp(state.translateY, -maxY, maxY);
+  };
+
+  const apply = () => {
+    clampTranslation();
+    img.style.transform = `translate(${state.translateX}px, ${state.translateY}px) scale(${state.scale})`;
+    wrap.classList.toggle('is-zoomed', state.scale > state.minScale + 0.001);
+  };
+
+  const reset = () => {
+    state.scale = state.minScale;
+    state.translateX = 0;
+    state.translateY = 0;
+    apply();
+  };
+
+  const onWheel = (e) => {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+    const prevScale = state.scale;
+    const next = clamp(state.scale * factor, state.minScale, state.maxScale);
+    if (Math.abs(next - state.scale) < 0.001) return;
+    const rect = wrap.getBoundingClientRect();
+    const offsetX = e.clientX - (rect.left + rect.width / 2);
+    const offsetY = e.clientY - (rect.top + rect.height / 2);
+    const ratio = next / prevScale;
+    state.scale = next;
+    if (next === state.minScale) {
+      state.translateX = 0;
+      state.translateY = 0;
+    } else {
+      state.translateX = state.translateX * ratio + offsetX * (1 - ratio);
+      state.translateY = state.translateY * ratio + offsetY * (1 - ratio);
+    }
+    apply();
+  };
+
+  const onPointerDown = (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    if (state.scale <= state.minScale + 0.001) {
+      reset();
+      return;
+    }
+    state.pointerId = e.pointerId;
+    state.startX = e.clientX;
+    state.startY = e.clientY;
+    state.startTX = state.translateX;
+    state.startTY = state.translateY;
+    wrap.setPointerCapture(e.pointerId);
+    wrap.classList.add('is-dragging');
+  };
+
+  const onPointerMove = (e) => {
+    if (state.pointerId !== e.pointerId) return;
+    if (state.scale <= state.minScale + 0.001) return;
+    e.preventDefault();
+    state.translateX = state.startTX + (e.clientX - state.startX);
+    state.translateY = state.startTY + (e.clientY - state.startY);
+    apply();
+    state.startX = e.clientX;
+    state.startY = e.clientY;
+    state.startTX = state.translateX;
+    state.startTY = state.translateY;
+  };
+
+  const onPointerUp = (e) => {
+    if (state.pointerId !== e.pointerId) return;
+    if (wrap.hasPointerCapture(e.pointerId)) wrap.releasePointerCapture(e.pointerId);
+    state.pointerId = null;
+    wrap.classList.remove('is-dragging');
+    if (state.scale <= state.minScale + 0.001) {
+      reset();
+    } else {
+      apply();
+    }
+  };
+
+  const onLostCapture = () => {
+    state.pointerId = null;
+    wrap.classList.remove('is-dragging');
+    if (state.scale <= state.minScale + 0.001) {
+      reset();
+    } else {
+      apply();
+    }
+  };
+
+  const onDblClick = () => {
+    reset();
+  };
+
+  wrap.addEventListener('wheel', onWheel, { passive: false });
+  wrap.addEventListener('pointerdown', onPointerDown);
+  wrap.addEventListener('pointermove', onPointerMove);
+  wrap.addEventListener('pointerup', onPointerUp);
+  wrap.addEventListener('pointercancel', onPointerUp);
+  wrap.addEventListener('lostpointercapture', onLostCapture);
+  wrap.addEventListener('dblclick', onDblClick);
+  img.addEventListener('dragstart', (e) => e.preventDefault());
+
+  apply();
+  if (!img.complete) {
+    img.addEventListener('load', apply, { once: true });
+  }
+
+  activeImageZoom = { wrap, onWheel, onPointerDown, onPointerMove, onPointerUp, onLostCapture, onDblClick };
+  return wrap;
+}
+
 function updatePreviewItems(){
   const wasActive = currentPreviewIndex >= 0 && currentPreviewIndex < previewItems.length;
   const activePath = wasActive ? previewItems[currentPreviewIndex].path : null;
@@ -400,6 +559,7 @@ function showPreviewAt(index){
   const box = document.getElementById('previewContent');
   const title = document.getElementById('previewTitle');
   if (!modal || !box || !title) return;
+  disposeActiveImageZoom();
   const prevVideo = box.querySelector('video');
   if (prevVideo) { prevVideo.pause(); prevVideo.src = ''; }
   box.innerHTML = '';
@@ -412,7 +572,8 @@ function showPreviewAt(index){
     const img = document.createElement('img');
     img.src = `/open?path=${encodeURIComponent(item.path)}`;
     img.alt = item.name;
-    box.appendChild(img);
+    const wrap = setupImageZoom(img);
+    box.appendChild(wrap);
   } else if (isVideoExt(item.name)) {
     const video = document.createElement('video');
     video.controls = true;
@@ -437,11 +598,8 @@ function showPreviewAt(index){
 
 function openPreview(item){
   updatePreviewItems();
-  let idx = previewItems.findIndex(it => it.path === item.path);
-  if (idx === -1) {
-    previewItems = previewItems.concat(item);
-    idx = previewItems.length - 1;
-  }
+  const idx = previewItems.findIndex(it => it.path === item.path);
+  if (idx === -1) return;
   showPreviewAt(idx);
 }
 
@@ -456,6 +614,7 @@ function closePreview(){
   modal.setAttribute('aria-hidden', 'true');
   document.body.style.overflow = '';
   currentPreviewIndex = -1;
+  disposeActiveImageZoom();
   updatePreviewControls();
 }
 
