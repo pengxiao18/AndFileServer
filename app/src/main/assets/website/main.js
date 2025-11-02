@@ -137,6 +137,8 @@ function _finishPanel(msg='下载完成 ✅'){
 let currentItemsRaw = [];
 let currentItemsFiltered = [];
 const selection = new Set();
+let previewItems = [];
+let currentPreviewIndex = -1;
 
 const getPath = ()=>{
   const h = location.hash.slice(1);
@@ -161,6 +163,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setTheme(getTheme());
   updateViewButtons();
   applyView(getView());
+  updatePreviewControls();
   bindUploadUI();
   load(true);
 });
@@ -357,12 +360,53 @@ function isVideoExt(name){
   return ["mp4","mkv","avi","mov","wmv","webm"].includes(ext);
 }
 
-function openPreview(item){
+function updatePreviewItems(){
+  const wasActive = currentPreviewIndex >= 0 && currentPreviewIndex < previewItems.length;
+  const activePath = wasActive ? previewItems[currentPreviewIndex].path : null;
+  previewItems = currentItemsFiltered.filter(it => !it.isDir && (isImageExt(it.name) || isVideoExt(it.name)));
+  if (activePath) {
+    currentPreviewIndex = previewItems.findIndex(it => it.path === activePath);
+  } else {
+    currentPreviewIndex = -1;
+  }
+  if (activePath && currentPreviewIndex === -1) {
+    closePreview();
+    return;
+  }
+  if (previewItems.length === 0) currentPreviewIndex = -1;
+  updatePreviewControls();
+}
+
+function updatePreviewControls(){
+  const prevBtn = document.getElementById('previewPrev');
+  const nextBtn = document.getElementById('previewNext');
+  const total = previewItems.length;
+  const hasActive = currentPreviewIndex >= 0 && currentPreviewIndex < total;
+  const canPrev = hasActive && currentPreviewIndex > 0;
+  const canNext = hasActive && currentPreviewIndex < total - 1;
+  if (prevBtn) {
+    prevBtn.disabled = !canPrev;
+    prevBtn.setAttribute('aria-disabled', String(!canPrev));
+  }
+  if (nextBtn) {
+    nextBtn.disabled = !canNext;
+    nextBtn.setAttribute('aria-disabled', String(!canNext));
+  }
+}
+
+function showPreviewAt(index){
+  if (index < 0 || index >= previewItems.length) return;
   const modal = document.getElementById('previewModal');
   const box = document.getElementById('previewContent');
   const title = document.getElementById('previewTitle');
-  title.textContent = item.name || '预览';
+  if (!modal || !box || !title) return;
+  const prevVideo = box.querySelector('video');
+  if (prevVideo) { prevVideo.pause(); prevVideo.src = ''; }
   box.innerHTML = '';
+
+  const item = previewItems[index];
+  currentPreviewIndex = index;
+  title.textContent = item.name || '预览';
 
   if (isImageExt(item.name)) {
     const img = document.createElement('img');
@@ -384,22 +428,65 @@ function openPreview(item){
     a.textContent = '在新标签页打开';
     box.appendChild(a);
   }
+
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
+  updatePreviewControls();
 }
+
+function openPreview(item){
+  updatePreviewItems();
+  let idx = previewItems.findIndex(it => it.path === item.path);
+  if (idx === -1) {
+    previewItems = previewItems.concat(item);
+    idx = previewItems.length - 1;
+  }
+  showPreviewAt(idx);
+}
+
 function closePreview(){
   const modal = document.getElementById('previewModal');
   const box = document.getElementById('previewContent');
-  if (!modal.classList.contains('open')) return;
-  modal.classList.remove('open');
-  modal.setAttribute('aria-hidden', 'true');
+  if (!modal || !box || !modal.classList.contains('open')) return;
   const video = box.querySelector('video');
   if (video) { video.pause(); video.src=''; }
   box.innerHTML = '';
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
   document.body.style.overflow = '';
+  currentPreviewIndex = -1;
+  updatePreviewControls();
 }
-document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') closePreview(); });
+
+function previewPrev(){
+  if (currentPreviewIndex > 0) {
+    showPreviewAt(currentPreviewIndex - 1);
+  }
+}
+
+function previewNext(){
+  if (currentPreviewIndex >= 0 && currentPreviewIndex < previewItems.length - 1) {
+    showPreviewAt(currentPreviewIndex + 1);
+  }
+}
+
+document.addEventListener('keydown', (e)=>{
+  const modal = document.getElementById('previewModal');
+  const isOpen = modal && modal.classList.contains('open');
+  if (e.key === 'Escape') {
+    closePreview();
+    return;
+  }
+  if (!isOpen) return;
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    previewPrev();
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    previewNext();
+  }
+});
 
 /* ===== 加载 & 过滤 & 渲染 ===== */
 async function load(skipHash = false){
@@ -435,6 +522,7 @@ function applyFilters(){
     return 0;
   });
   currentItemsFiltered = list;
+  updatePreviewItems();
   render(path, list);
 }
 

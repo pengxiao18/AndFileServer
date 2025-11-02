@@ -194,6 +194,7 @@ td,th{border-bottom:1px solid var(--border);padding:10px; font-size:14px;}
   box-shadow: 0 10px 30px rgba(0,0,0,.25);
 }
 .modal-header{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:4px 4px 8px; }
+.modal-actions{ display:flex; align-items:center; gap:6px; }
 .modal-title{ font-weight:600; }
 .modal-content{
   flex: 1 1 auto;

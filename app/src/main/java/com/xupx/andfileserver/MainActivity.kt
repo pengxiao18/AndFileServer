@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         binding = MainLayoutBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.root.keepScreenOn = true
         binding.btnStart.setOnClickListener {
             if (isStarted) {
                 stopService()
